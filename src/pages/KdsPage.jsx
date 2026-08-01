@@ -8,60 +8,80 @@ import pageStyles from './PageCommon.module.css';
 const KdsPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    // Simulated fetch
-    setTimeout(() => {
-      setOrders([
-        { id: 101, table: 'T-02', items: [{name: 'Margherita Pizza', qty: 1}, {name: 'Garlic Bread', qty: 1}], status: 'PENDING', time: '10:32 AM' },
-        { id: 102, table: 'T-05', items: [{name: 'Pasta Alfredo', qty: 2}, {name: 'Coke', qty: 2}], status: 'PENDING', time: '10:35 AM' },
-        { id: 103, table: 'T-01', items: [{name: 'Veggie Burger', qty: 1}, {name: 'Fries', qty: 1}], status: 'PREPARING', time: '10:25 AM' },
-        { id: 104, table: 'Takeaway', items: [{name: 'Chicken Wings', qty: 1}], status: 'READY', time: '10:15 AM' },
-      ]);
-      setLoading(false);
-    }, 800);
-  }, []);
-
-  const moveOrder = (id, newStatus) => {
-    setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
+  const fetchOrders = () => {
+    api.get('/orders/active')
+      .then(data => {
+        setOrders(Array.isArray(data) ? data : data?.content || []);
+      })
+      .catch(err => {
+        console.error(err);
+        setError('Failed to fetch orders from Kitchen Display System.');
+      })
+      .finally(() => setLoading(false));
   };
 
-  const pending = orders.filter(o => o.status === 'PENDING');
-  const preparing = orders.filter(o => o.status === 'PREPARING');
-  const ready = orders.filter(o => o.status === 'READY');
+  useEffect(() => {
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 5000); // Simple polling every 5s for KDS
+    return () => clearInterval(interval);
+  }, []);
 
-  const OrderCard = ({ order, nextStatus, nextLabel, icon: Icon, colorClass }) => (
-    <motion.div 
-      layout
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      className={`${styles.orderCard} ${colorClass}`}
-    >
-      <div className={styles.cardHeader}>
-        <span className={styles.orderId}>#{order.id}</span>
-        <span className={styles.orderTable}>{order.table}</span>
-      </div>
-      <div className={styles.timeWrap}>
-        <Clock size={14} /> <span className={styles.timeText}>{order.time}</span>
-      </div>
-      <ul className={styles.itemList}>
-        {order.items.map((item, i) => (
-          <li key={i} className={styles.item}>
-            <span className={styles.itemQty}>{item.qty}x</span>
-            <span className={styles.itemName}>{item.name}</span>
-          </li>
-        ))}
-      </ul>
-      {nextStatus && (
-        <button className={styles.actionBtn} onClick={() => moveOrder(order.id, nextStatus)}>
-          {nextLabel} <Icon size={16} />
-        </button>
-      )}
-    </motion.div>
-  );
+  const moveOrder = async (id, newStatus) => {
+    try {
+      await api.patch(`/orders/${id}/status`, { status: newStatus, remarks: 'Updated by Kitchen' });
+      // Optimistically update
+      setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update order status');
+    }
+  };
 
-  if (loading) return <div className={pageStyles.loading}><div className={pageStyles.spinner}></div></div>;
+  const isPending = (status) => ['NEW', 'RECEIVED'].includes(status);
+  const isPreparing = (status) => status === 'PREPARING';
+  const isReady = (status) => status === 'READY';
+
+  const pending = orders.filter(o => isPending(o.status));
+  const preparing = orders.filter(o => isPreparing(o.status));
+  const ready = orders.filter(o => isReady(o.status));
+
+  const OrderCard = ({ order, nextStatus, nextLabel, icon: Icon, colorClass }) => {
+    const time = new Date(order.placedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return (
+      <motion.div 
+        layout
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className={`${styles.orderCard} ${colorClass}`}
+      >
+        <div className={styles.cardHeader}>
+          <span className={styles.orderId}>#{order.orderNumber || order.id}</span>
+          <span className={styles.orderTable}>{order.tableNumber || `Table ${order.tableId}`}</span>
+        </div>
+        <div className={styles.timeWrap}>
+          <Clock size={14} /> <span className={styles.timeText}>{time}</span>
+        </div>
+        <ul className={styles.itemList}>
+          {(order.items || []).map((item, i) => (
+            <li key={i} className={styles.item}>
+              <span className={styles.itemQty}>{item.quantity}x</span>
+              <span className={styles.itemName}>{item.itemName}</span>
+            </li>
+          ))}
+        </ul>
+        {nextStatus && (
+          <button className={styles.actionBtn} onClick={() => moveOrder(order.id, nextStatus)}>
+            {nextLabel} <Icon size={16} />
+          </button>
+        )}
+      </motion.div>
+    );
+  };
+
+  if (loading && orders.length === 0) return <div className={pageStyles.loading}><div className={pageStyles.spinner}></div></div>;
 
   return (
     <div className={styles.kdsContainer}>
@@ -69,6 +89,8 @@ const KdsPage = () => {
         <h1 className={pageStyles.title}><MonitorPlay size={24}/> Kitchen Display System</h1>
       </div>
       
+      {error && <div className={pageStyles.error}><AlertCircle size={16}/> {error}</div>}
+
       <div className={styles.kanbanBoard}>
         {/* Pending Column */}
         <div className={styles.column}>

@@ -13,6 +13,7 @@ import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import OnboardingPage from './pages/OnboardingPage';
 import KdsPage from './pages/KdsPage';
+import BillingPage from './pages/BillingPage';
 import { NotFoundPage } from './pages/ErrorPage';
 
 // Auth and Setup Guard
@@ -71,6 +72,7 @@ function App() {
         <Route path="staff" element={<StaffPage />} />
         <Route path="tables" element={<TablesPage />} />
         <Route path="kds" element={<KdsPage />} />
+        <Route path="billing" element={<BillingPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         

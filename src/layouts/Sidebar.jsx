@@ -24,8 +24,8 @@ const navItems = [
   { path: '/menu', label: 'Menu', icon: ChefHat },
   { path: '/inventory', label: 'Inventory', icon: Package },
   { path: '/staff', label: 'Staff', icon: Users },
-  { path: '/tables', label: 'Tables', icon: Grid3x3 },
   { path: '/kds', label: 'KDS', icon: MonitorPlay },
+  { path: '/billing', label: 'Billing', icon: CreditCard },
   { path: '/reports', label: 'Reports', icon: BarChart3 },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];

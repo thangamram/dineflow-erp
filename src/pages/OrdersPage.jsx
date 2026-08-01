@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Minus, Trash2, Send, Coffee, Pizza, Utensils, Grid3x3 } from 'lucide-react';
+import { Plus, Minus, Trash2, Send, Coffee, Pizza, Utensils, Grid3x3, AlertCircle } from 'lucide-react';
 import api from '../api';
 import styles from './OrdersPage.module.css';
 import pageStyles from './PageCommon.module.css';
@@ -15,28 +15,34 @@ const OrdersPage = () => {
   const [menu, setMenu] = useState([]);
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   
   // POS State
   const [ticket, setTicket] = useState([]);
   const [selectedTable, setSelectedTable] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    // Simulated fetch
-    setTimeout(() => {
-      setMenu([
-        { id: 1, name: 'Margherita Pizza', price: 12.99, category: 'mains', color: '#fca5a5' },
-        { id: 2, name: 'Pepperoni Pizza', price: 14.99, category: 'mains', color: '#fca5a5' },
-        { id: 3, name: 'Pasta Alfredo', price: 11.50, category: 'mains', color: '#fcd34d' },
-        { id: 4, name: 'Veggie Burger', price: 9.99, category: 'mains', color: '#86efac' },
-        { id: 5, name: 'Coke', price: 2.50, category: 'drinks', color: '#93c5fd' },
-        { id: 6, name: 'Lemonade', price: 3.00, category: 'drinks', color: '#fde047' },
-        { id: 7, name: 'Iced Tea', price: 2.75, category: 'drinks', color: '#d8b4fe' },
-        { id: 8, name: 'Garlic Bread', price: 4.50, category: 'mains', color: '#fdba74' },
-      ]);
-      setTables(['T-01', 'T-02', 'T-03', 'T-04', 'T-05', 'Takeaway']);
+    Promise.all([
+      api.get('/menu-items'),
+      api.get('/tables')
+    ]).then(([menuRes, tablesRes]) => {
+      // Menu items come wrapped in a PageResponse object if fetched successfully
+      const menuData = menuRes?.content || (Array.isArray(menuRes) ? menuRes : []);
+      // Map colors for UI
+      const colors = ['#fca5a5', '#fcd34d', '#86efac', '#93c5fd', '#fde047', '#d8b4fe', '#fdba74'];
+      const menuWithColors = menuData.map((m, i) => ({ ...m, color: colors[i % colors.length] }));
+      setMenu(menuWithColors);
+
+      const tablesData = Array.isArray(tablesRes) ? tablesRes : (tablesRes?.content || []);
+      setTables(tablesData);
+    }).catch(err => {
+      console.error(err);
+      setError('Failed to fetch POS data from the server.');
+    }).finally(() => {
       setLoading(false);
-    }, 500);
+    });
   }, []);
 
   const addToTicket = (item) => {
@@ -62,15 +68,40 @@ const OrdersPage = () => {
     setTicket(ticket.filter(t => t.id !== id));
   };
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     if (!selectedTable) return alert('Please select a table');
     if (ticket.length === 0) return alert('Ticket is empty');
-    alert(`Order sent to kitchen for ${selectedTable}!`);
-    setTicket([]);
-    setSelectedTable('');
+    
+    setSubmitting(true);
+    try {
+      const payload = {
+        tableId: selectedTable,
+        orderType: 'DINE_IN',
+        remarks: 'Order from POS',
+        items: ticket.map(t => ({
+          menuItemId: t.id,
+          quantity: t.qty,
+          specialInstructions: ''
+        }))
+      };
+      
+      await api.post('/orders', payload);
+      alert('Order successfully sent to kitchen!');
+      setTicket([]);
+      setSelectedTable('');
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || 'Failed to place order.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const filteredMenu = activeCategory === 'all' ? menu : menu.filter(m => m.category === activeCategory);
+  // Basic categorization logic (can be updated to use actual categories)
+  const filteredMenu = activeCategory === 'all' 
+    ? menu 
+    : menu.filter(m => (m.categoryName || '').toLowerCase().includes(activeCategory.toLowerCase()));
+    
   const total = ticket.reduce((sum, item) => sum + (item.price * item.qty), 0);
 
   if (loading) return <div className={pageStyles.loading}><div className={pageStyles.spinner}></div></div>;
@@ -79,6 +110,7 @@ const OrdersPage = () => {
     <div className={styles.posContainer}>
       {/* Menu Section (Left) */}
       <div className={styles.menuSection}>
+        {error && <div className={pageStyles.error}><AlertCircle size={16}/> {error}</div>}
         <div className={styles.categories}>
           {MENU_CATEGORIES.map(cat => (
             <button 
@@ -92,6 +124,7 @@ const OrdersPage = () => {
         </div>
         
         <div className={styles.menuGrid}>
+          {menu.length === 0 && !error && <p>No menu items found. Please add them from the API or database.</p>}
           <AnimatePresence>
             {filteredMenu.map((item, i) => (
               <motion.button
@@ -106,7 +139,7 @@ const OrdersPage = () => {
                 onClick={() => addToTicket(item)}
               >
                 <span className={styles.itemName}>{item.name}</span>
-                <span className={styles.itemPrice}>₹{item.price.toFixed(2)}</span>
+                <span className={styles.itemPrice}>₹{(item.price || 0).toFixed(2)}</span>
               </motion.button>
             ))}
           </AnimatePresence>
@@ -125,7 +158,7 @@ const OrdersPage = () => {
               className={styles.select}
             >
               <option value="" disabled>Select Table...</option>
-              {tables.map(t => <option key={t} value={t}>{t}</option>)}
+              {tables.map(t => <option key={t.id} value={t.id}>{t.tableNumber}</option>)}
             </select>
           </div>
         </div>
@@ -168,9 +201,9 @@ const OrdersPage = () => {
           <button 
             className={styles.sendBtn}
             onClick={placeOrder}
-            disabled={ticket.length === 0 || !selectedTable}
+            disabled={ticket.length === 0 || !selectedTable || submitting}
           >
-            <Send size={20} /> Send to Kitchen
+            <Send size={20} /> {submitting ? 'Sending...' : 'Send to Kitchen'}
           </button>
         </div>
       </div>

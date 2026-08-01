@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Package, AlertCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Package, AlertCircle, Plus, X } from 'lucide-react';
 import api from '../api';
 import styles from './PageCommon.module.css';
 
@@ -8,24 +8,53 @@ const InventoryPage = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [newItem, setNewItem] = useState({ itemName: '', quantity: 0, unit: 'KG', reorderLevel: 10 });
+  const [saving, setSaving] = useState(false);
+
+  const fetchInventory = () => {
+    setLoading(true);
+    api.get('/inventory/ingredients')
+      .then(d => setItems(Array.isArray(d) ? d : d?.content || []))
+      .catch(err => setError(err.response?.data?.message || 'Failed to fetch inventory'))
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    api.get('/inventory').then(d => setItems(Array.isArray(d) ? d : d?.content || [])).catch(() => {
-      setItems([
-        { id: 1, name: 'Paneer (Cottage Cheese)', quantity: 50, unit: 'KG', reorderLevel: 10 },
-        { id: 2, name: 'Chicken Breast', quantity: 8, unit: 'KG', reorderLevel: 15 },
-        { id: 3, name: 'Tomatoes', quantity: 100, unit: 'KG', reorderLevel: 20 },
-        { id: 4, name: 'Chocolate & Cocoa', quantity: 2, unit: 'KG', reorderLevel: 5 }
-      ]);
-    }).finally(() => setLoading(false));
+    fetchInventory();
   }, []);
 
-  if (loading) return <div className={styles.loading}><div className={styles.spinner}></div></div>;
+  const handleAddItem = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      await api.post('/inventory/ingredients', newItem);
+      setShowModal(false);
+      setNewItem({ itemName: '', quantity: 0, unit: 'KG', reorderLevel: 10 });
+      fetchInventory();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to add item');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading && items.length === 0) return <div className={styles.loading}><div className={styles.spinner}></div></div>;
 
   return (
     <div>
-      <div className={styles.header}><h1 className={styles.title}><Package size={24}/> Inventory</h1></div>
+      <div className={styles.header} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 className={styles.title}><Package size={24}/> Inventory</h1>
+        <button className={styles.saveBtn} onClick={() => setShowModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', margin: 0 }}>
+          <Plus size={18} /> Add New Item
+        </button>
+      </div>
+      
       {error && <div className={styles.error}><AlertCircle size={16}/> {error}</div>}
+      
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead><tr><th>Item</th><th>Quantity</th><th>Unit</th><th>Reorder Level</th><th>Status</th></tr></thead>
@@ -44,8 +73,47 @@ const InventoryPage = () => {
             })}
           </tbody>
         </table>
-        {items.length===0 && !error && <p className={styles.empty}>No inventory items found</p>}
+        {items.length===0 && !error && !loading && <p className={styles.empty}>No inventory items found</p>}
       </div>
+
+      <AnimatePresence>
+        {showModal && (
+          <div className={styles.modalOverlay}>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className={styles.modalContent}
+            >
+              <div className={styles.modalHeader}>
+                <h2>Add Inventory Item</h2>
+                <button onClick={() => setShowModal(false)} className={styles.iconBtn}><X size={20}/></button>
+              </div>
+              <form onSubmit={handleAddItem} className={styles.formGrid} style={{ marginTop: '20px' }}>
+                <div className={styles.field}>
+                  <label className={styles.label}>Item Name</label>
+                  <input className={styles.input} required value={newItem.itemName} onChange={e => setNewItem({...newItem, itemName: e.target.value})} placeholder="e.g. Milk" />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Quantity</label>
+                  <input type="number" step="0.01" className={styles.input} required value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: parseFloat(e.target.value)})} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Unit</label>
+                  <input className={styles.input} required value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} placeholder="e.g. Liters, KG" />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Reorder Level</label>
+                  <input type="number" step="0.01" className={styles.input} required value={newItem.reorderLevel} onChange={e => setNewItem({...newItem, reorderLevel: parseFloat(e.target.value)})} />
+                </div>
+                <button type="submit" className={styles.saveBtn} style={{ gridColumn: '1 / -1', marginTop: '10px' }} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Item'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
