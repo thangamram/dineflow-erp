@@ -44,9 +44,9 @@ export default function OnboardingPage() {
     setSubmitting(true);
     try {
       // 1. Save Settings sequentially using existing API
-      await api.put('/settings/RESTAURANT_NAME', { settingValue: formData.restaurantName }).catch(()=>null);
-      await api.put('/settings/CURRENCY_SYMBOL', { settingValue: formData.currency }).catch(()=>null);
-      await api.put('/settings/DEFAULT_GST_PERCENTAGE', { settingValue: formData.gst }).catch(()=>null);
+      await api.put('/settings/RESTAURANT_NAME', { settingKey: 'RESTAURANT_NAME', settingValue: formData.restaurantName }).catch(()=>null);
+      await api.put('/settings/CURRENCY_SYMBOL', { settingKey: 'CURRENCY_SYMBOL', settingValue: formData.currency }).catch(()=>null);
+      await api.put('/settings/DEFAULT_GST_PERCENTAGE', { settingKey: 'DEFAULT_GST_PERCENTAGE', settingValue: formData.gst }).catch(()=>null);
 
       // 2. Mock tables creation loop using API
       const numTables = parseInt(formData.tableCount) || 15;

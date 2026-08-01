@@ -36,15 +36,23 @@ const SettingsPage = () => {
   const handleSave = async () => {
     setSaving(true); setError(''); setSuccess('');
     try { 
-      await api.put('/settings', settings); 
+      const mapping = {
+        restaurantName: 'RESTAURANT_NAME',
+        address: 'ADDRESS',
+        phone: 'PHONE',
+        email: 'EMAIL'
+      };
+      
+      for (const [key, val] of Object.entries(settings)) {
+        const backendKey = mapping[key];
+        if (backendKey) {
+          await api.put(`/settings/${backendKey}`, { settingKey: backendKey, settingValue: val });
+        }
+      }
       setSuccess('Settings saved successfully!'); 
-    } catch { 
-      // If API route fails, just pretend it succeeded for the demo
-      setTimeout(() => {
-        setSuccess('Settings saved successfully!');
-        setSaving(false);
-      }, 500);
-      return;
+    } catch (err) { 
+      setError('Failed to save settings to the server.');
+      console.error(err);
     } finally { 
       setSaving(false); 
     }
