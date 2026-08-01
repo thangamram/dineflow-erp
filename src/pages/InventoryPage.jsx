@@ -31,12 +31,19 @@ const InventoryPage = () => {
     setSaving(true);
     setError('');
     try {
-      await api.post('/inventory/ingredients', newItem);
+      const payload = {
+        name: newItem.itemName,
+        unitOfMeasure: newItem.unit,
+        currentStock: newItem.quantity,
+        minimumStock: newItem.reorderLevel,
+        unitCost: 0
+      };
+      await api.post('/inventory/ingredients', payload);
       setShowModal(false);
       setNewItem({ itemName: '', quantity: 0, unit: 'KG', reorderLevel: 10 });
       fetchInventory();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add item');
+      setError(err.response?.data?.message || 'Validation failed or Server error');
     } finally {
       setSaving(false);
     }
@@ -60,13 +67,13 @@ const InventoryPage = () => {
           <thead><tr><th>Item</th><th>Quantity</th><th>Unit</th><th>Reorder Level</th><th>Status</th></tr></thead>
           <tbody>
             {(Array.isArray(items) ? items : []).map((item, i) => {
-              const isLow = (item.quantity || 0) <= (item.reorderLevel || 10);
+              const isLow = item.lowStock;
               return (
                 <motion.tr key={item.id||i} initial={{opacity:0}} animate={{opacity:1}} transition={{delay:i*0.03}}>
-                  <td>{item.name || item.itemName}</td>
-                  <td>{item.quantity}</td>
-                  <td>{item.unit || 'pcs'}</td>
-                  <td>{item.reorderLevel || '—'}</td>
+                  <td>{item.name}</td>
+                  <td>{item.currentStock}</td>
+                  <td>{item.unitOfMeasure}</td>
+                  <td>{item.minimumStock}</td>
                   <td><span className={styles.badge} style={{background: isLow ? 'var(--warning-bg)' : 'var(--success-bg)', color: isLow ? 'var(--warning)' : 'var(--success)'}}>{isLow ? 'Low Stock' : 'In Stock'}</span></td>
                 </motion.tr>
               );
