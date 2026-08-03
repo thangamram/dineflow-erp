@@ -9,7 +9,7 @@ export const WebSocketProvider = ({ children }) => {
     const [connected, setConnected] = useState(true);
 
     useEffect(() => {
-        const socketUrl = 'http://localhost:8080/ws-erp'; 
+        const socketUrl = import.meta.env.VITE_WS_URL || 'https://restaurant-erp-backend-1-69e8.onrender.com/ws-erp'; 
 
         const stompClient = new Client({
             webSocketFactory: () => new SockJS(socketUrl),
