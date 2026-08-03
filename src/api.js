@@ -22,8 +22,14 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      const isLoginRequest = error.config?.url?.includes('/auth/login');
+      const token = localStorage.getItem('token');
+      const isMockToken = token && token.startsWith('mock-jwt-token');
+      
+      if (!isLoginRequest && !isMockToken) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

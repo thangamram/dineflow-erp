@@ -123,33 +123,31 @@ const MenuPage = () => {
             >
               <div className={styles.modalHeader}>
                 <h2>Add Menu Item</h2>
-                <button className={styles.closeBtn} onClick={() => setShowModal(false)}><X size={20}/></button>
+                <button className={styles.iconBtn} onClick={() => setShowModal(false)}><X size={20}/></button>
               </div>
               
-              <form className={styles.form} onSubmit={handleAddItem}>
-                <div className={styles.formGroup}>
-                  <label>Item Name</label>
-                  <input required value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="e.g. Garlic Naan" />
+              <form className={styles.formGrid} onSubmit={handleAddItem} style={{ marginTop: '20px' }}>
+                <div className={styles.field} style={{ gridColumn: '1 / -1' }}>
+                  <label className={styles.label}>Item Name</label>
+                  <input className={styles.input} required value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="e.g. Garlic Naan" />
                 </div>
                 
-                <div className={styles.formRow}>
-                  <div className={styles.formGroup}>
-                    <label>Price (₹)</label>
-                    <input required type="number" step="0.01" min="0" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} placeholder="0.00" />
-                  </div>
-                  
-                  <div className={styles.formGroup}>
-                    <label>Category</label>
-                    <select required value={newItem.categoryId} onChange={e => setNewItem({...newItem, categoryId: e.target.value})}>
-                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      {categories.length === 0 && <option value="">No categories found</option>}
-                    </select>
-                  </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Price (₹)</label>
+                  <input className={styles.input} required type="number" step="0.01" min="0" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} placeholder="0.00" />
+                </div>
+                
+                <div className={styles.field}>
+                  <label className={styles.label}>Category</label>
+                  <select className={styles.input} required value={newItem.categoryId} onChange={e => setNewItem({...newItem, categoryId: e.target.value})}>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {categories.length === 0 && <option value="">No categories found</option>}
+                  </select>
                 </div>
 
-                <div className={styles.modalFooter}>
-                  <button type="button" className={styles.cancelBtn} onClick={() => setShowModal(false)}>Cancel</button>
-                  <button type="submit" className={styles.saveBtn} disabled={saving || categories.length === 0}>
+                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                  <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 16px', border: '1px solid var(--border)', background: 'transparent', borderRadius: 'var(--radius-md)', cursor: 'pointer', color: 'var(--text-primary)' }}>Cancel</button>
+                  <button type="submit" className={styles.saveBtn} disabled={saving || categories.length === 0} style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Save size={18} /> {saving ? 'Saving...' : 'Save Item'}
                   </button>
                 </div>
