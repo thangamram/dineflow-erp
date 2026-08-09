@@ -1,0 +1,67 @@
+/* TablesPage styles */
+.container {
+  padding: 24px;
+}
+.legend {
+  display: flex;
+  gap: 16px;
+}
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.legendBox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+.available {
+  background-color: #d1fae5;
+  border: 1px solid #10b981;
+}
+.occupied {
+  background-color: #fee2e2;
+  border: 1px solid #ef4444;
+}
+.cleaning {
+  background-color: #fef3c7;
+  border: 1px solid #f59e0b;
+}
+.floorPlanContainer {
+  margin-top: 24px;
+  border: 1px solid #e5e7eb;
+  padding: 24px;
+  border-radius: 12px;
+  background: #fff;
+}
+.floorPlanGrid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-gap: 16px;
+  min-height: 400px;
+}
+.table {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tableRound {
+  border-radius: 50%;
+}
+.tableRect {
+  border-radius: 8px;
+}
+.tableNumber {
+  font-weight: 700;
+  font-size: 16px;
+}
+.tableCapacity {
+  font-size: 12px;
+  color: #6b7280;
+}

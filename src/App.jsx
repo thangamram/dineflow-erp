@@ -6,11 +6,11 @@ import LoginPage from './pages/LoginPage';
 
 // Owner Pages
 import DashboardPage from './pages/owner/DashboardPage';
-import MenuPage from './pages/owner/MenuPage';
+import MenuPage from './pages/MenuPage';
 import InventoryManagement from './pages/owner/InventoryManagement';
 import ProcurementPage from './pages/owner/ProcurementPage';
 import StaffPage from './pages/owner/StaffPage';
-import TablesPage from './pages/owner/TablesPage';
+import TablesPage from './pages/TablesPage';
 import ReportsPage from './pages/owner/ReportsPage';
 import SettingsPage from './pages/owner/SettingsPage';
 import PayrollManagement from './pages/owner/PayrollManagement';
@@ -56,66 +56,6 @@ const SuspenseWrapper = ({ children }) => (
 
 // Force initialize mock data for testing if empty
 const initializeMockData = () => {
-  const storedTables = localStorage.getItem('mockTables');
-  if (!storedTables || storedTables === '[]') {
-    const defaultTable = [{ id: '1', number: '1', capacity: 4, status: 'Available', assignedWaiter: 'waiter@dineflow.com' }];
-    localStorage.setItem('mockTables', JSON.stringify(defaultTable));
-  }
-  const storedMenu = localStorage.getItem('mockMenu');
-  const hasAllCategories = storedMenu && storedMenu.includes('Starters') && storedMenu.includes('Beverages') && storedMenu.includes('Breads') && storedMenu.includes('Desserts');
-  if (!storedMenu || storedMenu === '[]' || !hasAllCategories) {
-    const defaultMenu = [
-      // === STARTERS ===
-      { id: '1', name: 'Masala Dosa', category: 'Starters', price: 120, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '2', name: 'Paneer Tikka', category: 'Starters', price: 180, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '3', name: 'Veg Spring Roll', category: 'Starters', price: 140, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '4', name: 'Aloo Tikki', category: 'Starters', price: 100, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '5', name: 'Chicken 65', category: 'Starters', price: 200, type: 'non-veg', status: 'Active', isAvailable: true },
-      { id: '6', name: 'Chicken Lollipop', category: 'Starters', price: 220, type: 'non-veg', status: 'Active', isAvailable: true },
-      { id: '7', name: 'Fish Fry', category: 'Starters', price: 250, type: 'non-veg', status: 'Active', isAvailable: true },
-      { id: '8', name: 'Mutton Seekh Kebab', category: 'Starters', price: 280, type: 'non-veg', status: 'Active', isAvailable: true },
-
-      // === MAINS ===
-      { id: '9', name: 'Paneer Butter Masala', category: 'Mains', price: 220, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '10', name: 'Veg Fried Rice', category: 'Mains', price: 180, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '11', name: 'Dal Tadka', category: 'Mains', price: 150, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '12', name: 'Palak Paneer', category: 'Mains', price: 200, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '13', name: 'Chicken Biryani', category: 'Mains', price: 280, type: 'non-veg', status: 'Active', isAvailable: true },
-      { id: '14', name: 'Mutton Rogan Josh', category: 'Mains', price: 350, type: 'non-veg', status: 'Active', isAvailable: true },
-      { id: '15', name: 'Butter Chicken', category: 'Mains', price: 300, type: 'non-veg', status: 'Active', isAvailable: true },
-      { id: '16', name: 'Egg Curry', category: 'Mains', price: 160, type: 'non-veg', status: 'Active', isAvailable: true },
-
-      // === BEVERAGES ===
-      { id: '17', name: 'Fresh Lime Soda', category: 'Beverages', price: 60, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '18', name: 'Mango Lassi', category: 'Beverages', price: 80, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '19', name: 'Masala Chai', category: 'Beverages', price: 40, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '20', name: 'Cold Coffee', category: 'Beverages', price: 100, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '21', name: 'Buttermilk', category: 'Beverages', price: 50, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '22', name: 'Fresh Orange Juice', category: 'Beverages', price: 90, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '23', name: 'Watermelon Juice', category: 'Beverages', price: 70, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '24', name: 'Rose Milk', category: 'Beverages', price: 60, type: 'veg', status: 'Active', isAvailable: true },
-
-      // === BREADS ===
-      { id: '25', name: 'Naan', category: 'Breads', price: 40, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '26', name: 'Garlic Naan', category: 'Breads', price: 60, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '27', name: 'Butter Roti', category: 'Breads', price: 30, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '28', name: 'Laccha Paratha', category: 'Breads', price: 50, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '29', name: 'Cheese Naan', category: 'Breads', price: 70, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '30', name: 'Keema Naan', category: 'Breads', price: 80, type: 'non-veg', status: 'Active', isAvailable: true },
-      { id: '31', name: 'Chicken Stuffed Paratha', category: 'Breads', price: 90, type: 'non-veg', status: 'Active', isAvailable: true },
-
-      // === DESSERTS ===
-      { id: '32', name: 'Gulab Jamun', category: 'Desserts', price: 80, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '33', name: 'Ice Cream Sundae', category: 'Desserts', price: 120, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '34', name: 'Rasgulla', category: 'Desserts', price: 70, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '35', name: 'Kheer', category: 'Desserts', price: 90, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '36', name: 'Jalebi', category: 'Desserts', price: 60, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '37', name: 'Brownie with Ice Cream', category: 'Desserts', price: 150, type: 'veg', status: 'Active', isAvailable: true },
-      { id: '38', name: 'Egg Pudding', category: 'Desserts', price: 100, type: 'non-veg', status: 'Active', isAvailable: true },
-      { id: '39', name: 'Egg Halwa', category: 'Desserts', price: 110, type: 'non-veg', status: 'Active', isAvailable: true }
-    ];
-    localStorage.setItem('mockMenu', JSON.stringify(defaultMenu));
-  }
   const storedStaff = localStorage.getItem('mockStaff');
   let staffList = [];
   if (storedStaff && storedStaff !== '[]') {
@@ -138,16 +78,6 @@ const initializeMockData = () => {
     };
     staffList.push(defaultOwner);
     localStorage.setItem('mockStaff', JSON.stringify(staffList));
-  }
-  
-  if (!localStorage.getItem('mockLeaves')) {
-    localStorage.setItem('mockLeaves', '[]');
-  }
-  if (!localStorage.getItem('mockAttendance')) {
-    localStorage.setItem('mockAttendance', '[]');
-  }
-  if (!localStorage.getItem('mockNotifications')) {
-    localStorage.setItem('mockNotifications', '[]');
   }
 };
 initializeMockData();
