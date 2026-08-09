@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'https://restaurant-erp-backend-production.up.railway.app/api/v1',
+  timeout: 10000,
   headers: { 'Content-Type': 'application/json' }
 });
 
@@ -15,7 +16,7 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => {
-    if (response.data && response.data.hasOwnProperty('success')) {
+    if (response.data && typeof response.data === 'object' && response.data.success === true) {
       return response.data.data;
     }
     return response.data;
