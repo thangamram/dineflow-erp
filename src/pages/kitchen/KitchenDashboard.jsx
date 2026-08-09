@@ -92,7 +92,18 @@ export default function KitchenDashboard() {
           deductInventoryForOrder(orderToUpdate);
       }
 
-      await api.patch(`/orders/${id}/status`, { status: newStatus });
+      // If backend throws error for NEW -> PREPARING, try RECEIVED first
+      try {
+        await api.patch(`/orders/${id}/status`, { status: newStatus });
+      } catch (err) {
+        if (orderToUpdate && orderToUpdate.status === 'NEW' && newStatus === 'PREPARING') {
+           await api.patch(`/orders/${id}/status`, { status: 'RECEIVED' });
+           await api.patch(`/orders/${id}/status`, { status: 'PREPARING' });
+        } else {
+           throw err;
+        }
+      }
+      
       fetchOrders();
     } catch (err) {
       console.error('Failed to update status', err);
