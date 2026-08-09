@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useWebSocket } from '../../contexts/WebSocketContext';
+import api from '../../api';
 import { 
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     BarChart, Bar
@@ -24,61 +25,66 @@ export default function DashboardPage() {
     const [lowInventory, setLowInventory] = useState(0);
 
     useEffect(() => {
-      const updateMetrics = () => {
-        const paidStored = localStorage.getItem('cashierPaid');
-        const tablesStored = localStorage.getItem('mockTables');
-        const inventoryStored = localStorage.getItem('mockInventory');
-
-        let revenue = 0;
-        let totalOrders = 0;
-        let activeCustomers = 0;
-        let activity = [];
-        let rData = [];
-        let fData = [];
-        let lowInv = 0;
-
-        if (inventoryStored) {
-            const inv = JSON.parse(inventoryStored);
-            lowInv = inv.filter(i => i.stock <= i.minStock).length;
-        }
-
-        if (paidStored && JSON.parse(paidStored).length > 0) {
-          const paidBills = JSON.parse(paidStored);
-          totalOrders = paidBills.length;
-          revenue = paidBills.reduce((sum, bill) => sum + (bill.total || 0), 0);
+      const updateMetrics = async () => {
+        try {
+          // Fetch bills for revenue
+          const allBillsPage = await api.get('/bills?size=100').catch(() => null);
+          const activeOrdersRes = await api.get('/orders/active').catch(() => []);
+          const tablesRes = await api.get('/tables').catch(() => []);
           
-          activity = paidBills.slice(-5).reverse().map(bill => ({
-            time: new Date(bill.paidAt || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-            event: `Payment of ₹${bill.total.toFixed(0)} received for ${bill.table} via ${bill.paymentMethod || 'UPI'}`
-          }));
+          let revenue = 0;
+          let totalOrders = 0;
+          let activeCustomers = 0;
+          let activity = [];
+          let fData = [];
+          
+          if (allBillsPage && allBillsPage.content) {
+            const paidBills = allBillsPage.content.filter(b => b.status === 'PAID');
+            totalOrders = paidBills.length;
+            revenue = paidBills.reduce((sum, bill) => sum + (bill.grandTotal || 0), 0);
+            
+            activity = paidBills.slice(-5).map(bill => ({
+              time: new Date(bill.generatedAt || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+              event: `Payment of ₹${(bill.grandTotal || 0).toFixed(0)} received via ${bill.paymentMethod || 'Cash'}`
+            }));
 
-          // Calculate top foods dynamically
-          const itemCounts = {};
-          paidBills.forEach(bill => {
-             if(bill.items) {
-                 bill.items.forEach(item => {
-                     itemCounts[item.name] = (itemCounts[item.name] || 0) + item.quantity;
-                 });
-             }
-          });
-          fData = Object.keys(itemCounts).map(name => ({name, sales: itemCounts[name]})).sort((a,b)=>b.sales-a.sales).slice(0,4);
-          rData = defaultRevenueData; // You could dynamically generate this by date if desired
+            // Top Foods
+            const itemCounts = {};
+            paidBills.forEach(bill => {
+               if(bill.items) {
+                   bill.items.forEach(item => {
+                       itemCounts[item.itemName] = (itemCounts[item.itemName] || 0) + item.quantity;
+                   });
+               }
+            });
+            fData = Object.keys(itemCounts).map(name => ({name, sales: itemCounts[name]})).sort((a,b)=>b.sales-a.sales).slice(0,4);
+          }
+
+          // Active customers
+          if (tablesRes && tablesRes.length > 0) {
+              activeCustomers = tablesRes.filter(t => t.status === 'OCCUPIED' || t.status === 'Customer Dining').length;
+          }
+
+          // Low Inventory
+          let lowInv = 0;
+          const inventoryStored = localStorage.getItem('mockInventory');
+          if (inventoryStored) {
+              const inv = JSON.parse(inventoryStored);
+              lowInv = inv.filter(i => i.stock <= i.minStock).length;
+          }
+
+          setMetrics({ revenue, totalOrders, activeCustomers });
+          setRecentActivity(activity);
+          setChartData({ revenue: defaultRevenueData, topFoods: fData });
+          setLowInventory(lowInv);
+
+        } catch (err) {
+            console.error('Failed to sync metrics', err);
         }
-
-        if (tablesStored) {
-          const tables = JSON.parse(tablesStored);
-          activeCustomers = tables.filter(t => t.status === 'Customer Dining' || t.status === 'Waiting for Payment' || t.status === 'Occupied').length;
-        }
-
-        setMetrics({ revenue, totalOrders, activeCustomers });
-        setRecentActivity(activity);
-        setChartData({ revenue: rData, topFoods: fData });
-        setLowInventory(lowInv);
       };
 
       updateMetrics();
-      // Poll to simulate real-time updates for the dashboard
-      const interval = setInterval(updateMetrics, 2000);
+      const interval = setInterval(updateMetrics, 5000);
       return () => clearInterval(interval);
     }, []);
 
