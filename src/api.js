@@ -24,10 +24,12 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       const isLoginRequest = error.config?.url?.includes('/auth/login');
+      const isCustomerPortal = window.location.pathname.includes('/customer');
       const token = localStorage.getItem('token');
       const isMockToken = token && token.startsWith('mock-jwt-token');
       
-      if (!isLoginRequest && !isMockToken) {
+      // Don't redirect customer portal — they auto-login silently
+      if (!isLoginRequest && !isMockToken && !isCustomerPortal) {
         localStorage.removeItem('token');
         window.location.href = '/login';
       }

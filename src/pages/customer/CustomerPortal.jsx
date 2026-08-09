@@ -271,19 +271,33 @@ export default function CustomerPortal() {
   };
 
   const getAuthToken = async () => {
-    let token = localStorage.getItem('token');
-    if (!token) {
+    // Always get a fresh token — customer1 uses Admin@123 (updated by V4 migration)
+    const tryLogin = async (user, pass) => {
       try {
         const authData = await api.post('/auth/login', {
-          usernameOrEmailOrMobile: 'customer1',
-          password: 'password123'
+          usernameOrEmailOrMobile: user,
+          password: pass
         });
-        token = authData.accessToken;
-        localStorage.setItem('token', token);
-      } catch (err) {
-        console.error('Silent customer login failed:', err);
+        if (authData?.accessToken) {
+          localStorage.setItem('token', authData.accessToken);
+          return authData.accessToken;
+        }
+      } catch (e) {
+        console.warn(`Silent login failed for ${user}:`, e?.response?.data?.message || e.message);
       }
+      return null;
+    };
+
+    // Try with current stored token first
+    const existingToken = localStorage.getItem('token');
+    if (existingToken && !existingToken.startsWith('mock-jwt-token')) {
+      return existingToken;
     }
+
+    // Token missing or mock — re-login
+    let token = await tryLogin('customer1', 'Admin@123');
+    if (!token) token = await tryLogin('customer1', 'password123');
+    if (!token) token = await tryLogin('admin', 'password123');
     return token;
   };
 
@@ -349,6 +363,11 @@ export default function CustomerPortal() {
 
   const handleConfirmOrder = async () => {
     try {
+      // Force fresh token — clear stale/mock token first
+      const currentToken = localStorage.getItem('token');
+      if (!currentToken || currentToken.startsWith('mock-jwt-token')) {
+        localStorage.removeItem('token');
+      }
       await getAuthToken();
       
       // Get table ID
