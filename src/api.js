@@ -25,11 +25,19 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const isLoginRequest = error.config?.url?.includes('/auth/login');
       const isCustomerPortal = window.location.pathname.includes('/customer');
+      const isPortalPage = window.location.pathname.includes('/owner') ||
+                           window.location.pathname.includes('/waiter') ||
+                           window.location.pathname.includes('/kitchen') ||
+                           window.location.pathname.includes('/cashier');
       const token = localStorage.getItem('token');
-      const isMockToken = token && token.startsWith('mock-jwt-token');
       
-      // Don't redirect customer portal — they auto-login silently
-      if (!isLoginRequest && !isCustomerPortal) {
+      // Don't redirect on customer portal or if we're mid-login
+      // Don't redirect from portal pages on every 401 (token might just be slow to refresh)
+      // Only redirect if we have NO token at all
+      if (!isLoginRequest && !isCustomerPortal && !isPortalPage && !token) {
+        window.location.href = '/login';
+      } else if (!isLoginRequest && !isCustomerPortal && token && !token.startsWith('mock-jwt-token')) {
+        // Token is real but expired - clear and redirect
         localStorage.removeItem('token');
         window.location.href = '/login';
       }
