@@ -34,7 +34,7 @@ export default function MenuPage() {
                     name: item.name,
                     category: item.categoryName || 'General',
                     price: Number(item.price || 0),
-                    type: item.dietaryType === 'VEG' ? 'veg' : 'non-veg',
+                    type: item.dietaryType === 'VEG' ? 'veg' : item.dietaryType === 'N_A' ? 'n/a' : 'non-veg',
                     status: item.available ? 'Active' : 'Inactive',
                     description: item.description,
                     image: item.imageUrl,
@@ -97,7 +97,7 @@ export default function MenuPage() {
                 categoryId: catId,
                 description: formData.description || '',
                 available: formData.status === 'Active',
-                dietaryType: formData.type === 'veg' ? 'VEG' : 'NON_VEG'
+                dietaryType: formData.type === 'veg' ? 'VEG' : formData.type === 'n/a' ? 'N_A' : 'NON_VEG'
             };
 
             if (editingItem) {
@@ -218,10 +218,16 @@ export default function MenuPage() {
                                     <td className="p-4 text-gray-600 font-medium">{item.category}</td>
                                     <td className="p-4">
                                         <div className="flex items-center gap-1.5">
-                                            <div className={`w-3 h-3 border ${item.type === 'veg' ? 'border-green-600' : 'border-red-600'} flex items-center justify-center p-0.5`}>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${item.type === 'veg' ? 'bg-green-600' : 'bg-red-600'}`}></div>
-                                            </div>
-                                            <span className="text-xs font-semibold uppercase text-gray-500">{item.type}</span>
+                                            {item.type === 'n/a' ? (
+                                                <span className="text-xs font-semibold uppercase text-gray-400">N/A</span>
+                                            ) : (
+                                                <>
+                                                    <div className={`w-3 h-3 border ${item.type === 'veg' ? 'border-green-600' : 'border-red-600'} flex items-center justify-center p-0.5`}>
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${item.type === 'veg' ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                                                    </div>
+                                                    <span className="text-xs font-semibold uppercase text-gray-500">{item.type}</span>
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="p-4 text-gray-900 font-bold">₹{parseFloat(item.price).toFixed(2)}</td>
