@@ -123,15 +123,18 @@ export default function TablesPage() {
     
     const handleAssignWaiter = async (tableId, waiterUsername) => {
         try {
+            // Save to localStorage for immediate local display
             const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
             assignments[tableId] = waiterUsername;
             localStorage.setItem('tableWaiterAssignments', JSON.stringify(assignments));
 
+            // Also save to backend database so other devices/portals can read it
             const t = tables.find(tbl => tbl.id === tableId);
             await api.put(`/tables/${tableId}`, {
                 tableNumber: t.number,
                 capacity: t.capacity,
                 status: t.status === 'Available' ? 'AVAILABLE' : t.status === 'Customer Dining' ? 'OCCUPIED' : 'CLEANING',
+                assignedWaiter: waiterUsername,
                 qrToken: t.qrToken
             });
             setActiveAssignmentMenu(null);

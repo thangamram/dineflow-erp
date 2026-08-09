@@ -243,9 +243,9 @@ export default function CustomerPortal() {
           return;
         }
         
-        // Read waiter assignment from localStorage (backend Table has no assignedWaiter column)
+        // Read waiter assignment from backend first (cross-device), fallback to localStorage
         const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
-        const assignedEmpId = assignments[String(myTable.id)] || myTable.assignedWaiter || '';
+        const assignedEmpId = myTable.assignedWaiter || assignments[String(myTable.id)] || '';
 
         if (assignedEmpId) {
           // Try to resolve name from mockStaff
