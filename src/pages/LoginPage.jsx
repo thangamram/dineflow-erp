@@ -65,19 +65,19 @@ const LoginPage = () => {
       const searchUsername = username.trim();
       const searchPassword = password.trim();
       
-      // Master root access - guarantees owner can always log in to wipe corrupted data
+      let finalUsername = searchUsername;
+      let finalPassword = searchPassword;
+      
+      // Map owner/Admin@123 to backend database admin credentials
       if (searchUsername.toLowerCase() === 'owner' && searchPassword === 'Admin@123') {
-        handleLoginSuccess({
-          id: 'OWN-0001', employeeId: 'OWN-0001', name: 'Owner Admin', 
-          username: 'owner', role: 'Owner', status: 'Active', forcePasswordChange: false
-        });
-        return;
+        finalUsername = 'admin';
+        finalPassword = 'password123';
       }
 
       // Backend API login
       const data = await api.post('/auth/login', {
-        usernameOrEmailOrMobile: searchUsername,
-        password: searchPassword
+        usernameOrEmailOrMobile: finalUsername,
+        password: finalPassword
       });
 
       const role = data.roles[0];
