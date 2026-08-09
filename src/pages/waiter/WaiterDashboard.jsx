@@ -69,7 +69,16 @@ const WaiterDashboard = () => {
 
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      await api.patch(`/orders/${orderId}/status`, { status: newStatus });
+      try {
+        await api.patch(`/orders/${orderId}/status`, { status: newStatus });
+      } catch (err) {
+        if (newStatus === 'SERVED') {
+           // Fallback to DELIVERED for older backend versions that don't have SERVED in the enum
+           await api.patch(`/orders/${orderId}/status`, { status: 'DELIVERED' });
+        } else {
+           throw err;
+        }
+      }
       await fetchOrders();
     } catch (err) {
       console.error('Failed to update order status', err);
