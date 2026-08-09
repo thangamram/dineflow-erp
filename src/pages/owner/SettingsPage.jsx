@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Store, Receipt, Bell, Shield, Smartphone, CheckCircle } from 'lucide-react';
+import api from '../../api';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('profile');
@@ -13,8 +14,32 @@ export default function SettingsPage() {
     });
     const [saved, setSaved] = useState(false);
 
-    const handleWipeData = () => {
-        if (confirm("WARNING: This will wipe all mock data (Tables, Menu, Inventory, Orders, Staff). Your global settings will be kept. Do you want to proceed and launch a fresh ERP?")) {
+    const handleWipeData = async () => {
+        if (confirm("WARNING: This will wipe all data (Tables, Menu, Inventory, Orders, Staff) from both the browser and the database. Do you want to proceed and launch a fresh ERP?")) {
+            
+            // Delete all tables from the database REST API
+            try {
+                const tables = await api.get('/tables');
+                if (Array.isArray(tables)) {
+                    for (const t of tables) {
+                        await api.delete(`/tables/${t.id}`).catch(() => {});
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to clear database tables:', e);
+            }
+
+            // Delete all menu items from the database REST API
+            try {
+                const menuRes = await api.get('/menu-items?size=200');
+                const items = menuRes.content || [];
+                for (const item of items) {
+                    await api.delete(`/menu-items/${item.id}`).catch(() => {});
+                }
+            } catch (e) {
+                console.error('Failed to clear database menu items:', e);
+            }
+
             localStorage.setItem('mockTables', '[]');
             localStorage.setItem('mockMenu', '[]');
             localStorage.setItem('mockInventory', '[]');
@@ -30,7 +55,7 @@ export default function SettingsPage() {
             localStorage.removeItem('onboardingStep');
             localStorage.removeItem('onboardingData');
             localStorage.removeItem('lastPlacedOrderId');
-            alert("ERP successfully wiped! All local mock data has been deleted.");
+            alert("ERP successfully wiped! You can now start adding your real restaurant data.");
             window.location.reload();
         }
     };
