@@ -29,7 +29,7 @@ api.interceptors.response.use(
       const isMockToken = token && token.startsWith('mock-jwt-token');
       
       // Don't redirect customer portal — they auto-login silently
-      if (!isLoginRequest && !isMockToken && !isCustomerPortal) {
+      if (!isLoginRequest && !isCustomerPortal) {
         localStorage.removeItem('token');
         window.location.href = '/login';
       }
