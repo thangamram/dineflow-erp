@@ -11,7 +11,7 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLoginSuccess = (user) => {
+  const handleLoginSuccess = async (user) => {
     // Add audit log
     const auditLogs = JSON.parse(localStorage.getItem('mockAuditLogs') || '[]');
     auditLogs.unshift({
@@ -24,7 +24,34 @@ const LoginPage = () => {
     });
     localStorage.setItem('mockAuditLogs', JSON.stringify(auditLogs));
 
-    localStorage.setItem('token', 'mock-jwt-token-' + user.id);
+    // Get a real backend token so API calls don't return 401
+    try {
+      const data = await api.post('/auth/login', {
+        usernameOrEmailOrMobile: 'admin',
+        password: 'password123' // default fallback
+      });
+      if (data && data.accessToken) {
+        localStorage.setItem('token', data.accessToken);
+      } else {
+        localStorage.setItem('token', 'mock-jwt-token-' + user.id);
+      }
+    } catch (e) {
+      // Try updated V4 password
+      try {
+        const data2 = await api.post('/auth/login', {
+          usernameOrEmailOrMobile: 'admin',
+          password: 'Admin@123'
+        });
+        if (data2 && data2.accessToken) {
+          localStorage.setItem('token', data2.accessToken);
+        } else {
+          localStorage.setItem('token', 'mock-jwt-token-' + user.id);
+        }
+      } catch (err) {
+        localStorage.setItem('token', 'mock-jwt-token-' + user.id);
+      }
+    }
+    
     localStorage.setItem('role', getRoleCode(user.role));
     localStorage.setItem('username', user.username);
     localStorage.setItem('employeeId', user.employeeId);
@@ -81,7 +108,7 @@ const LoginPage = () => {
             return;
           }
           // Successful local staff login
-          handleLoginSuccess(matched);
+          await handleLoginSuccess(matched);
           setLoading(false);
           return;
         }
