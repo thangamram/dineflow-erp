@@ -17,11 +17,17 @@ export default function SettingsPage() {
     const handleWipeData = async () => {
         if (confirm("WARNING: This will permanently delete ALL data (Tables, Menu, Inventory, Orders, Bills, Staff) from the database and browser. This cannot be undone. Proceed?")) {
 
-            // 1. Delete all orders first (to remove FK constraints on tables/bills)
+            // 1. Delete ALL orders first (active + completed, to remove FK constraints on tables/bills)
             try {
-                const orders = await api.get('/orders/active').catch(() => []);
-                const orderList = Array.isArray(orders) ? orders : (orders?.content || []);
+                const ordersRes = await api.get('/orders?page=0&size=1000').catch(() => ({}));
+                const orderList = ordersRes?.content || (Array.isArray(ordersRes) ? ordersRes : []);
                 for (const o of orderList) {
+                    await api.delete(`/orders/${o.id}`).catch(() => {});
+                }
+                // Also try active orders endpoint as fallback
+                const activeOrders = await api.get('/orders/active').catch(() => []);
+                const activeList = Array.isArray(activeOrders) ? activeOrders : [];
+                for (const o of activeList) {
                     await api.delete(`/orders/${o.id}`).catch(() => {});
                 }
             } catch (e) { console.error('Failed to clear orders:', e); }
