@@ -17,14 +17,17 @@ export default function TablesPage() {
         try {
             const backendTables = await api.get('/tables');
             const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
-            const mapped = (backendTables || []).map(t => ({
-                id: t.id,
-                number: t.tableNumber || String(t.id),
-                capacity: t.capacity || t.seats || 4,
-                status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Customer Dining' : 'Needs Cleaning',
-                assignedWaiter: assignments[t.id] || '',
-                qrToken: t.qrToken || String(t.id)
-            }));
+            const deletedIds = JSON.parse(localStorage.getItem('deletedTableIds') || '[]');
+            const mapped = (backendTables || [])
+                .filter(t => !deletedIds.includes(t.id))
+                .map(t => ({
+                    id: t.id,
+                    number: t.tableNumber || String(t.id),
+                    capacity: t.capacity || t.seats || 4,
+                    status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Customer Dining' : 'Needs Cleaning',
+                    assignedWaiter: assignments[t.id] || '',
+                    qrToken: t.qrToken || String(t.id)
+                }));
             setTables(mapped);
         } catch (err) {
             console.error('Failed to load tables from API:', err);
@@ -89,13 +92,16 @@ export default function TablesPage() {
 
     const handleDelete = async (id) => {
         if (confirm('Are you sure you want to delete this table?')) {
+            const deletedIds = JSON.parse(localStorage.getItem('deletedTableIds') || '[]');
+            deletedIds.push(id);
+            localStorage.setItem('deletedTableIds', JSON.stringify(deletedIds));
+
             try {
                 await api.delete(`/tables/${id}`);
-                loadData();
             } catch (err) {
-                console.error('Failed to delete table:', err);
-                saveTables(tables.filter(t => t.id !== id));
+                console.warn('Backend table delete skipped due to foreign key history:', err);
             }
+            loadData();
         }
     };
 

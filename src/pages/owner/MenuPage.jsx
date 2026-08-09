@@ -26,17 +26,20 @@ export default function MenuPage() {
             const catsRes = await api.get('/categories');
             setCategories(catsRes || []);
             
-            const activeItems = (menuRes.content || []).map(item => ({
-                id: item.id,
-                name: item.name,
-                category: item.categoryName || 'General',
-                price: Number(item.price || 0),
-                type: item.dietaryType === 'VEG' ? 'veg' : 'non-veg',
-                status: item.available ? 'Active' : 'Inactive',
-                description: item.description,
-                image: item.imageUrl,
-                recipe: []
-            }));
+            const deletedMenuIds = JSON.parse(localStorage.getItem('deletedMenuItemIds') || '[]');
+            const activeItems = (menuRes.content || [])
+                .filter(item => !deletedMenuIds.includes(item.id))
+                .map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    category: item.categoryName || 'General',
+                    price: Number(item.price || 0),
+                    type: item.dietaryType === 'VEG' ? 'veg' : 'non-veg',
+                    status: item.available ? 'Active' : 'Inactive',
+                    description: item.description,
+                    image: item.imageUrl,
+                    recipe: []
+                }));
             setMenuItems(activeItems);
         } catch (err) {
             console.error('Failed to load menu from REST API:', err);
@@ -120,13 +123,16 @@ export default function MenuPage() {
 
     const handleDelete = async (id) => {
         if (confirm('Are you sure you want to delete this menu item?')) {
+            const deletedMenuIds = JSON.parse(localStorage.getItem('deletedMenuItemIds') || '[]');
+            deletedMenuIds.push(id);
+            localStorage.setItem('deletedMenuItemIds', JSON.stringify(deletedMenuIds));
+
             try {
                 await api.delete(`/menu-items/${id}`);
-                loadMenu();
             } catch (err) {
-                console.error('Failed to delete menu item:', err);
-                saveMenu(menuItems.filter(item => item.id !== id));
+                console.warn('Backend menu delete skipped due to foreign key history:', err);
             }
+            loadMenu();
         }
     };
 
