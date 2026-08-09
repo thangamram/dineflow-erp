@@ -17,7 +17,16 @@ export default function SettingsPage() {
     const handleWipeData = async () => {
         if (confirm("WARNING: This will permanently delete ALL data (Tables, Menu, Inventory, Orders, Bills, Staff) from the database and browser. This cannot be undone. Proceed?")) {
 
-            // 1. Delete ALL orders first (active + completed, to remove FK constraints on tables/bills)
+            // 1. Delete all bills first (because they reference orders)
+            try {
+                const bills = await api.get('/bills').catch(() => []);
+                const billList = Array.isArray(bills) ? bills : (bills?.content || []);
+                for (const b of billList) {
+                    await api.delete(`/bills/${b.id}`).catch(() => {});
+                }
+            } catch (e) { console.error('Failed to clear bills:', e); }
+
+            // 2. Delete ALL orders next (active + completed, to remove FK constraints on tables)
             try {
                 const ordersRes = await api.get('/orders?page=0&size=1000').catch(() => ({}));
                 const orderList = ordersRes?.content || (Array.isArray(ordersRes) ? ordersRes : []);
@@ -31,15 +40,6 @@ export default function SettingsPage() {
                     await api.delete(`/orders/${o.id}`).catch(() => {});
                 }
             } catch (e) { console.error('Failed to clear orders:', e); }
-
-            // 2. Delete all bills
-            try {
-                const bills = await api.get('/bills').catch(() => []);
-                const billList = Array.isArray(bills) ? bills : (bills?.content || []);
-                for (const b of billList) {
-                    await api.delete(`/bills/${b.id}`).catch(() => {});
-                }
-            } catch (e) { console.error('Failed to clear bills:', e); }
 
             // 3. Delete all tables - track ones that still can't be deleted (FK) and hide them
             const failedTableIds = [];
