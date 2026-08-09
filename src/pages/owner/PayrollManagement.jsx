@@ -34,12 +34,24 @@ export default function PayrollManagement() {
     }, []);
 
     const loadData = () => {
-        const storedStaff = localStorage.getItem('mockStaff');
-        if (storedStaff) setStaff(JSON.parse(storedStaff));
+        const storedStaff = JSON.parse(localStorage.getItem('mockStaff') || '[]');
+        setStaff(storedStaff);
 
         const storedPayroll = localStorage.getItem('mockPayroll');
         if (storedPayroll) {
-            setPayrolls(JSON.parse(storedPayroll));
+            const allPayrolls = JSON.parse(storedPayroll);
+            // Auto-clean: remove payroll records where the employee no longer exists
+            const validPayrolls = allPayrolls.filter(p => {
+                const empExists = storedStaff.some(
+                    s => String(s.id) === String(p.employeeId) || String(s.employeeId) === String(p.employeeId)
+                );
+                return empExists;
+            });
+            // If we cleaned some out, persist the cleaned list
+            if (validPayrolls.length !== allPayrolls.length) {
+                localStorage.setItem('mockPayroll', JSON.stringify(validPayrolls));
+            }
+            setPayrolls(validPayrolls);
         } else {
             setPayrolls([]);
         }
