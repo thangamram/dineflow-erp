@@ -4,6 +4,7 @@ import { CheckCircle, Clock, Utensils, Truck, ArrowLeft, RefreshCw, Download, Re
 import { useNavigate } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import api from '../../api';
 
 export default function OrderTracking() {
   const { subscribeToTopic, connected } = useWebSocket();
@@ -15,31 +16,38 @@ export default function OrderTracking() {
   const [paidBill, setPaidBill] = useState(null);
   
   useEffect(() => {
-    const checkPayment = () => {
-      const stored = localStorage.getItem('cashierPaid');
-      const currentSession = localStorage.getItem('customerSessionId');
-      
-      if (stored && currentSession) {
-        const bills = JSON.parse(stored);
-        
-        // Extract session start time from sess_X_TIMESTAMP
-        const sessionParts = currentSession.split('_');
-        const sessionStartTime = parseInt(sessionParts[2]);
-
-        // Find a bill for this table that was paid AFTER this session started
-        const myBill = bills.find(b => 
-          b.table === `Table ${tableNumber}` && 
-          new Date(b.paidAt).getTime() > sessionStartTime
-        );
-        
-        if (myBill) {
-          setPaidBill(myBill);
+    const checkPayment = async () => {
+      try {
+        const dbTables = await api.get('/tables');
+        const myTable = dbTables.find(t => String(t.tableNumber || t.id) === String(tableNumber));
+        if (myTable && myTable.status === 'AVAILABLE') {
+          // Find if there is any settled bill for this table
+          const bills = await api.get('/bills').catch(() => []);
+          const settled = (Array.isArray(bills) ? bills : (bills?.content || [])).find(b => 
+            String(b.tableId) === String(myTable.id) || String(b.tableNumber) === String(tableNumber)
+          );
+          if (settled) {
+            setPaidBill({
+              id: settled.id || 'BILL-101',
+              total: settled.totalAmount || 0,
+              paidAt: settled.paidAt || new Date().toISOString(),
+              paymentMethod: settled.paymentMethod || 'CASH'
+            });
+          } else {
+            setPaidBill({
+              id: 'BILL-' + (myTable.id || 101),
+              total: 0,
+              paidAt: new Date().toISOString(),
+              paymentMethod: 'CASH'
+            });
+          }
         }
+      } catch (err) {
+        console.error(err);
       }
     };
     
-    // Poll for payment
-    const interval = setInterval(checkPayment, 2000);
+    const interval = setInterval(checkPayment, 3000);
     checkPayment();
     return () => clearInterval(interval);
   }, [tableNumber]);

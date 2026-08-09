@@ -28,21 +28,30 @@ export default function CustomerPortal() {
   const [validationError, setValidationError] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const stored = localStorage.getItem('mockTables');
-    if (stored) {
-      setAvailableTables(JSON.parse(stored));
-    } else {
-      setAvailableTables([
-        { id: 1, number: '1' },
-        { id: 2, number: '2' },
-        { id: 3, number: '3' },
-        { id: 4, number: '4' }
-      ]);
+  const loadTables = async () => {
+    try {
+      const dbTables = await api.get('/tables');
+      const mapped = (dbTables || []).map(t => ({
+        id: t.id,
+        number: t.tableNumber || String(t.id),
+        capacity: t.capacity || t.seats || 4,
+        status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Occupied' : 'Cleaning',
+        assignedWaiter: t.assignedWaiter || '',
+        qrToken: t.qrToken || String(t.id)
+      }));
+      setAvailableTables(mapped);
+      return mapped;
+    } catch (e) {
+      console.error(e);
+      return [];
     }
+  };
+
+  useEffect(() => {
+    loadTables();
   }, []);
 
-  const startSession = (tableNum) => {
+  const startSession = async (tableNum) => {
     const activeTable = String(tableNum || tableNumber);
     if (!activeTable.trim()) return;
     const newSessionId = `sess_${activeTable}_${Date.now()}`;
@@ -50,11 +59,15 @@ export default function CustomerPortal() {
     localStorage.setItem('tableNumber', activeTable);
     setSessionId(newSessionId);
     
-    const storedTables = localStorage.getItem('mockTables');
-    if (storedTables) {
-      const tables = JSON.parse(storedTables);
-      const updatedTables = tables.map(t => String(t.number) === activeTable ? { ...t, status: 'Occupied' } : t);
-      localStorage.setItem('mockTables', JSON.stringify(updatedTables));
+    try {
+      const tablesList = await loadTables();
+      const matchedTable = tablesList.find(t => String(t.number) === activeTable);
+      if (matchedTable) {
+        await api.patch(`/tables/${matchedTable.id}/status?status=OCCUPIED`).catch(() => {});
+        loadTables();
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -82,16 +95,20 @@ export default function CustomerPortal() {
                     setValidationError('Invalid QR Code. Please contact restaurant staff.');
                     return;
                   }
-                  const storedTables = localStorage.getItem('mockTables');
-                  if (storedTables) {
-                    const tables = JSON.parse(storedTables);
-                    const matchedTable = tables.find(t => String(t.number) === tableParam);
-                    if (!matchedTable || (matchedTable.qrToken && matchedTable.qrToken !== tokenParam)) {
-                      setValidationError('Invalid QR Code. Please contact restaurant staff.');
-                      return;
+                  const checkAndStartFromScanner = async () => {
+                    try {
+                      const dbTables = await api.get('/tables');
+                      const matchedTable = dbTables.find(t => String(t.tableNumber || t.id) === tableParam);
+                      if (!matchedTable || (matchedTable.qrToken && matchedTable.qrToken !== tokenParam)) {
+                        setValidationError('Invalid QR Code. Please contact restaurant staff.');
+                        return;
+                      }
+                      startSession(tableParam);
+                    } catch (e) {
+                      startSession(tableParam);
                     }
-                  }
-                  startSession(tableParam);
+                  };
+                  checkAndStartFromScanner();
                 } else {
                   startSession(decodedText);
                 }
@@ -129,36 +146,44 @@ export default function CustomerPortal() {
         return;
       }
       
-      const storedTables = localStorage.getItem('mockTables');
-      if (storedTables) {
-        const tables = JSON.parse(storedTables);
-        const matchedTable = tables.find(t => String(t.number) === tableParam);
-        
-        if (!matchedTable) {
-          setValidationError('Invalid Table. Please contact restaurant staff.');
-          return;
-        }
-        
-        if (matchedTable.qrToken && matchedTable.qrToken !== tokenParam) {
-          setValidationError('Invalid QR Code. Please contact restaurant staff.');
-          return;
-        }
-        
-        const currentSession = localStorage.getItem('customerSessionId');
-        const currentTable = localStorage.getItem('tableNumber');
-        
-        if (!currentSession || currentTable !== tableParam) {
+      const checkAndStart = async () => {
+        try {
+          const dbTables = await api.get('/tables');
+          const matchedTable = dbTables.find(t => String(t.tableNumber || t.id) === tableParam);
+          
+          if (!matchedTable) {
+            setValidationError('Invalid Table. Please contact restaurant staff.');
+            return;
+          }
+          
+          if (matchedTable.qrToken && matchedTable.qrToken !== tokenParam) {
+            setValidationError('Invalid QR Code. Please contact restaurant staff.');
+            return;
+          }
+          
+          const currentSession = localStorage.getItem('customerSessionId');
+          const currentTable = localStorage.getItem('tableNumber');
+          
+          if (!currentSession || currentTable !== tableParam) {
+            const newSessionId = `sess_${tableParam}_${Date.now()}`;
+            localStorage.setItem('customerSessionId', newSessionId);
+            localStorage.setItem('tableNumber', tableParam);
+            setSessionId(newSessionId);
+            setTableNumber(tableParam);
+            
+            await api.patch(`/tables/${matchedTable.id}/status?status=OCCUPIED`).catch(() => {});
+          }
+        } catch (err) {
+          console.error(err);
           const newSessionId = `sess_${tableParam}_${Date.now()}`;
           localStorage.setItem('customerSessionId', newSessionId);
           localStorage.setItem('tableNumber', tableParam);
           setSessionId(newSessionId);
           setTableNumber(tableParam);
-          
-          const updatedTables = tables.map(t => String(t.number) === tableParam ? { ...t, status: 'Occupied' } : t);
-          localStorage.setItem('mockTables', JSON.stringify(updatedTables));
         }
-      }
+      };
       
+      checkAndStart();
       window.history.replaceState({}, '', '/customer');
     }
   }, []);
@@ -181,22 +206,36 @@ export default function CustomerPortal() {
     }
   }, [sessionId, tableNumber]);
 
-  const fetchDashboardData = () => {
-    const storedOrders = localStorage.getItem('mockOrders');
-    if (storedOrders) {
-      const allOrders = JSON.parse(storedOrders);
-      setMyOrders(allOrders.filter(o => o.tableNumber === String(tableNumber)));
+  const fetchDashboardData = async () => {
+    try {
+      const activeRes = await api.get('/orders/active');
+      const filtered = (activeRes || []).filter(o => String(o.tableNumber || o.tableId) === String(tableNumber));
+      const mapped = filtered.map(bo => ({
+        id: bo.id.toString(),
+        tableNumber: bo.tableNumber || bo.tableId || '?',
+        status: bo.status,
+        remarks: bo.remarks,
+        items: (bo.items || []).map(bi => ({ name: bi.itemName, quantity: bi.quantity, price: bi.price })),
+        total: bo.totalAmount || 0,
+        time: bo.placedAt ? new Date(bo.placedAt).toLocaleTimeString() : new Date().toLocaleTimeString()
+      }));
+      setMyOrders(mapped);
+    } catch (e) {
+      console.error(e);
+      const storedOrders = localStorage.getItem('mockOrders');
+      if (storedOrders) {
+        const allOrders = JSON.parse(storedOrders);
+        setMyOrders(allOrders.filter(o => o.tableNumber === String(tableNumber)));
+      }
     }
     
-    const storedTables = localStorage.getItem('mockTables');
-    if (storedTables) {
-      const tables = JSON.parse(storedTables);
-      const myTable = tables.find(t => t.number === String(tableNumber));
+    try {
+      const dbTables = await api.get('/tables');
+      const myTable = dbTables.find(t => String(t.tableNumber || t.id) === String(tableNumber));
       if (myTable) {
-        setTableStatus(myTable.status);
-        
-        // Auto-logout if table becomes available (Cashier paid)
-        if (myTable.status === 'Available') {
+        const mappedStatus = myTable.status === 'AVAILABLE' ? 'Available' : myTable.status === 'OCCUPIED' ? 'Occupied' : 'Cleaning';
+        setTableStatus(mappedStatus);
+        if (mappedStatus === 'Available') {
           handleLogout();
           return;
         }
@@ -218,6 +257,8 @@ export default function CustomerPortal() {
            setWaiterName('Pending Assignment');
         }
       }
+    } catch (err) {
+      console.error(err);
     }
   };
 
