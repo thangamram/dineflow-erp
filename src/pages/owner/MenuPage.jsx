@@ -26,9 +26,9 @@ export default function MenuPage() {
             const catsRes = await api.get('/categories');
             setCategories(catsRes || []);
             
-            const deletedMenuIds = JSON.parse(localStorage.getItem('deletedMenuItemIds') || '[]');
+            const deletedMenuIds = (JSON.parse(localStorage.getItem('deletedMenuItemIds') || '[]')).map(String);
             const activeItems = (menuRes.content || [])
-                .filter(item => !deletedMenuIds.includes(item.id))
+                .filter(item => !deletedMenuIds.includes(String(item.id)))
                 .map(item => ({
                     id: item.id,
                     name: item.name,
@@ -123,16 +123,22 @@ export default function MenuPage() {
 
     const handleDelete = async (id) => {
         if (confirm('Are you sure you want to delete this menu item?')) {
-            const deletedMenuIds = JSON.parse(localStorage.getItem('deletedMenuItemIds') || '[]');
-            deletedMenuIds.push(id);
-            localStorage.setItem('deletedMenuItemIds', JSON.stringify(deletedMenuIds));
+            // Immediately hide from UI
+            setMenuItems(prev => prev.filter(item => String(item.id) !== String(id)));
 
+            // Persist hidden IDs to survive page refresh
+            const deletedMenuIds = (JSON.parse(localStorage.getItem('deletedMenuItemIds') || '[]')).map(String);
+            if (!deletedMenuIds.includes(String(id))) {
+                deletedMenuIds.push(String(id));
+                localStorage.setItem('deletedMenuItemIds', JSON.stringify(deletedMenuIds));
+            }
+
+            // Try real delete in background
             try {
                 await api.delete(`/menu-items/${id}`);
             } catch (err) {
-                console.warn('Backend menu delete skipped due to foreign key history:', err);
+                console.warn('Backend menu delete skipped (FK constraint):', err?.message);
             }
-            loadMenu();
         }
     };
 

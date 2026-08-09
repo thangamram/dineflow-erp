@@ -17,9 +17,9 @@ export default function TablesPage() {
         try {
             const backendTables = await api.get('/tables');
             const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
-            const deletedIds = JSON.parse(localStorage.getItem('deletedTableIds') || '[]');
+            const deletedIds = (JSON.parse(localStorage.getItem('deletedTableIds') || '[]')).map(String);
             const mapped = (backendTables || [])
-                .filter(t => !deletedIds.includes(t.id))
+                .filter(t => !deletedIds.includes(String(t.id)))
                 .map(t => ({
                     id: t.id,
                     number: t.tableNumber || String(t.id),
@@ -92,16 +92,22 @@ export default function TablesPage() {
 
     const handleDelete = async (id) => {
         if (confirm('Are you sure you want to delete this table?')) {
-            const deletedIds = JSON.parse(localStorage.getItem('deletedTableIds') || '[]');
-            deletedIds.push(id);
-            localStorage.setItem('deletedTableIds', JSON.stringify(deletedIds));
+            // Immediately hide from UI
+            setTables(prev => prev.filter(t => String(t.id) !== String(id)));
 
+            // Persist hidden IDs to survive page refresh
+            const deletedIds = (JSON.parse(localStorage.getItem('deletedTableIds') || '[]')).map(String);
+            if (!deletedIds.includes(String(id))) {
+                deletedIds.push(String(id));
+                localStorage.setItem('deletedTableIds', JSON.stringify(deletedIds));
+            }
+
+            // Try real delete in background
             try {
                 await api.delete(`/tables/${id}`);
             } catch (err) {
-                console.warn('Backend table delete skipped due to foreign key history:', err);
+                console.warn('Backend table delete skipped (FK constraint):', err?.message);
             }
-            loadData();
         }
     };
 
