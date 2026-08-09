@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://restaurant-erp-backend-production.up.railway.app/api/v1',
-  timeout: 10000,
+  baseURL: 'https://restaurant-erp-backend-production.up.railway.app/api/v1',
+  timeout: 15000,
   headers: { 'Content-Type': 'application/json' }
 });
 
