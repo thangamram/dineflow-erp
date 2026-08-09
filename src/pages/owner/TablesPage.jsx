@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Coffee, Utensils, CheckCircle, Clock, Users, DollarSign, QrCode, Trash2, Edit2, X, User } from 'lucide-react';
+import api from '../../api';
 
 export default function TablesPage() {
     const [tables, setTables] = useState([]);
@@ -12,15 +13,26 @@ export default function TablesPage() {
     // For inline waiter assignment
     const [activeAssignmentMenu, setActiveAssignmentMenu] = useState(null);
 
-    const loadData = () => {
-        const storedTables = localStorage.getItem('mockTables');
-        if (storedTables) {
-            const parsed = JSON.parse(storedTables);
-            // Ensure every table has a QR security token
-            const migrated = parsed.map(t => t.qrToken ? t : { ...t, qrToken: String(t.id || Date.now()) });
-            setTables(migrated);
-        } else {
-            setTables([]);
+    const loadData = async () => {
+        try {
+            const backendTables = await api.get('/tables');
+            const mapped = (backendTables || []).map(t => ({
+                id: t.id,
+                number: t.tableNumber || String(t.id),
+                capacity: t.capacity || t.seats || 4,
+                status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Customer Dining' : 'Needs Cleaning',
+                assignedWaiter: t.assignedWaiter || '',
+                qrToken: t.qrToken || String(t.id)
+            }));
+            setTables(mapped);
+        } catch (err) {
+            console.error('Failed to load tables from API:', err);
+            const storedTables = localStorage.getItem('mockTables');
+            if (storedTables) {
+                const parsed = JSON.parse(storedTables);
+                const migrated = parsed.map(t => t.qrToken ? t : { ...t, qrToken: String(t.id || Date.now()) });
+                setTables(migrated);
+            }
         }
 
         const storedStaff = localStorage.getItem('mockStaff');
@@ -43,42 +55,98 @@ export default function TablesPage() {
         localStorage.setItem('mockTables', JSON.stringify(updatedTables));
     };
 
-    const handleAddTable = (e) => {
+    const handleAddTable = async (e) => {
         e.preventDefault();
         if (!newTable.number.trim()) return;
-        const updated = [...tables, { 
-            id: Date.now(), 
-            number: newTable.number, 
-            capacity: newTable.capacity, 
-            status: 'Available',
-            assignedWaiter: newTable.assignedWaiter,
-            qrToken: String(Date.now())
-        }];
-        saveTables(updated);
-        setShowAddModal(false);
-        setNewTable({ number: '', capacity: 4, assignedWaiter: '' });
-    };
-
-    const handleDelete = (id) => {
-        if (confirm('Are you sure you want to delete this table?')) {
-            saveTables(tables.filter(t => t.id !== id));
+        
+        try {
+            const payload = {
+                tableNumber: newTable.number,
+                capacity: Number(newTable.capacity),
+                status: 'AVAILABLE',
+                qrToken: String(Date.now())
+            };
+            await api.post('/tables', payload);
+            setShowAddModal(false);
+            setNewTable({ number: '', capacity: 4, assignedWaiter: '' });
+            loadData();
+        } catch (err) {
+            console.error('Failed to create table via API:', err);
+            const updated = [...tables, { 
+                id: Date.now(), 
+                number: newTable.number, 
+                capacity: newTable.capacity, 
+                status: 'Available',
+                assignedWaiter: newTable.assignedWaiter,
+                qrToken: String(Date.now())
+            }];
+            saveTables(updated);
+            setShowAddModal(false);
+            setNewTable({ number: '', capacity: 4, assignedWaiter: '' });
         }
     };
 
-    const handleMarkAvailable = (id) => {
-        saveTables(tables.map(t => t.id === id ? { ...t, status: 'Available' } : t));
-    };
-    
-    const handleAssignWaiter = (tableId, waiterUsername) => {
-        saveTables(tables.map(t => t.id === tableId ? { ...t, assignedWaiter: waiterUsername } : t));
-        setActiveAssignmentMenu(null);
+    const handleDelete = async (id) => {
+        if (confirm('Are you sure you want to delete this table?')) {
+            try {
+                await api.delete(`/tables/${id}`);
+                loadData();
+            } catch (err) {
+                console.error('Failed to delete table:', err);
+                saveTables(tables.filter(t => t.id !== id));
+            }
+        }
     };
 
-    const handleRegenerateQr = (tableId) => {
+    const handleMarkAvailable = async (id) => {
+        try {
+            await api.patch(`/tables/${id}/status?status=AVAILABLE`);
+            loadData();
+        } catch (err) {
+            console.error('Failed to update table status:', err);
+            saveTables(tables.map(t => t.id === id ? { ...t, status: 'Available' } : t));
+        }
+    };
+    
+    const handleAssignWaiter = async (tableId, waiterUsername) => {
+        try {
+            const t = tables.find(tbl => tbl.id === tableId);
+            await api.put(`/tables/${tableId}`, {
+                tableNumber: t.number,
+                capacity: t.capacity,
+                status: t.status === 'Available' ? 'AVAILABLE' : t.status === 'Customer Dining' ? 'OCCUPIED' : 'CLEANING',
+                assignedWaiter: waiterUsername,
+                qrToken: t.qrToken
+            });
+            setActiveAssignmentMenu(null);
+            loadData();
+        } catch (err) {
+            console.error('Failed to assign waiter:', err);
+            saveTables(tables.map(t => t.id === tableId ? { ...t, assignedWaiter: waiterUsername } : t));
+            setActiveAssignmentMenu(null);
+        }
+    };
+
+    const handleRegenerateQr = async (tableId) => {
         if (confirm("Are you sure you want to regenerate the QR code for this table? Any old printed QR codes for this table will stop working.")) {
-            const updated = tables.map(t => t.id === tableId ? { ...t, qrToken: String(Date.now()) } : t);
-            saveTables(updated);
-            alert("QR Code regenerated successfully!");
+            try {
+                const t = tables.find(tbl => tbl.id === tableId);
+                const newToken = String(Date.now());
+                await api.put(`/tables/${tableId}`, {
+                    tableNumber: t.number,
+                    capacity: t.capacity,
+                    status: t.status === 'Available' ? 'AVAILABLE' : t.status === 'Customer Dining' ? 'OCCUPIED' : 'CLEANING',
+                    assignedWaiter: t.assignedWaiter,
+                    qrToken: newToken
+                });
+                alert("QR Code regenerated successfully!");
+                loadData();
+            } catch (err) {
+                console.error('Failed to regenerate QR code:', err);
+                const updated = tables.map(t => t.id === tableId ? { ...t, qrToken: String(Date.now()) } : t);
+                saveTables(updated);
+                alert("QR Code regenerated successfully!");
+            }
         }
     };
 

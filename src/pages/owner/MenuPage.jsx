@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit2, Trash2, Image as ImageIcon, X, Check, Save } from 'lucide-react';
+import api from '../../api';
 
 export default function MenuPage() {
     const [searchTerm, setSearchTerm] = useState('');
@@ -8,7 +9,7 @@ export default function MenuPage() {
     const [editingItem, setEditingItem] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
-        category: 'Mains',
+        category: 'Main Course',
         price: '',
         type: 'veg',
         status: 'Active',
@@ -17,13 +18,34 @@ export default function MenuPage() {
         recipe: [] // Array of { ingredientId, qty }
     });
     const [inventoryItems, setInventoryItems] = useState([]);
+    const [categories, setCategories] = useState([]);
 
-    const loadMenu = () => {
-        const stored = localStorage.getItem('mockMenu');
-        if (stored) {
-            setMenuItems(JSON.parse(stored));
-        } else {
-            setMenuItems([]);
+    const loadMenu = async () => {
+        try {
+            const menuRes = await api.get('/menu-items?size=200');
+            const catsRes = await api.get('/categories');
+            setCategories(catsRes || []);
+            
+            const activeItems = (menuRes.content || []).map(item => ({
+                id: item.id,
+                name: item.name,
+                category: item.categoryName || 'General',
+                price: Number(item.price || 0),
+                type: item.dietaryType === 'VEG' ? 'veg' : 'non-veg',
+                status: item.available ? 'Active' : 'Inactive',
+                description: item.description,
+                image: item.imageUrl,
+                recipe: []
+            }));
+            setMenuItems(activeItems);
+        } catch (err) {
+            console.error('Failed to load menu from REST API:', err);
+            const stored = localStorage.getItem('mockMenu');
+            if (stored) {
+                setMenuItems(JSON.parse(stored));
+            } else {
+                setMenuItems([]);
+            }
         }
 
         const storedInv = localStorage.getItem('mockInventory');
@@ -42,7 +64,7 @@ export default function MenuPage() {
     };
 
     const handleOpenAdd = () => {
-        setFormData({ name: '', category: 'Mains', price: '', type: 'veg', status: 'Active', description: '', image: '', recipe: [] });
+        setFormData({ name: '', category: 'Main Course', price: '', type: 'veg', status: 'Active', description: '', image: '', recipe: [] });
         setEditingItem(null);
         setShowAddModal(true);
     };
@@ -53,32 +75,81 @@ export default function MenuPage() {
         setShowAddModal(true);
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.name || !formData.price) return;
         
         const priceNum = parseFloat(formData.price);
         
-        if (editingItem) {
-            const updated = menuItems.map(item => item.id === editingItem ? { ...item, ...formData, price: priceNum } : item);
-            saveMenu(updated);
-        } else {
-            const newItem = { ...formData, id: Date.now(), price: priceNum };
-            const updated = [...menuItems, newItem];
-            saveMenu(updated);
+        try {
+            let cat = categories.find(c => c.name.toLowerCase() === formData.category.toLowerCase());
+            if (!cat && categories.length > 0) {
+                cat = categories[0];
+            }
+            const catId = cat ? cat.id : 1;
+
+            const payload = {
+                name: formData.name,
+                price: priceNum,
+                categoryId: catId,
+                description: formData.description || '',
+                available: formData.status === 'Active',
+                dietaryType: formData.type === 'veg' ? 'VEG' : 'NON_VEG'
+            };
+
+            if (editingItem) {
+                await api.put(`/menu-items/${editingItem}`, payload);
+            } else {
+                await api.post('/menu-items', payload);
+            }
+            setShowAddModal(false);
+            loadMenu();
+        } catch (err) {
+            console.error('Failed to save menu item via API:', err);
+            if (editingItem) {
+                const updated = menuItems.map(item => item.id === editingItem ? { ...item, ...formData, price: priceNum } : item);
+                saveMenu(updated);
+            } else {
+                const newItem = { ...formData, id: Date.now(), price: priceNum };
+                const updated = [...menuItems, newItem];
+                saveMenu(updated);
+            }
+            setShowAddModal(false);
         }
-        setShowAddModal(false);
     };
 
-    const handleDelete = (id) => {
+    const handleDelete = async (id) => {
         if (confirm('Are you sure you want to delete this menu item?')) {
-            saveMenu(menuItems.filter(item => item.id !== id));
+            try {
+                await api.delete(`/menu-items/${id}`);
+                loadMenu();
+            } catch (err) {
+                console.error('Failed to delete menu item:', err);
+                saveMenu(menuItems.filter(item => item.id !== id));
+            }
         }
     };
 
-    const toggleStatus = (id, currentStatus) => {
+    const toggleStatus = async (id, currentStatus) => {
         const newStatus = currentStatus === 'Active' ? 'Inactive' : 'Active';
-        saveMenu(menuItems.map(item => item.id === id ? { ...item, status: newStatus } : item));
+        try {
+            const item = menuItems.find(i => i.id === id);
+            let cat = categories.find(c => c.name.toLowerCase() === item.category.toLowerCase());
+            const catId = cat ? cat.id : 1;
+            
+            await api.put(`/menu-items/${id}`, {
+                name: item.name,
+                price: item.price,
+                categoryId: catId,
+                description: item.description || '',
+                available: newStatus === 'Active',
+                dietaryType: item.type === 'veg' ? 'VEG' : 'NON_VEG'
+            });
+            loadMenu();
+        } catch (err) {
+            console.error('Failed to toggle status:', err);
+            saveMenu(menuItems.map(item => item.id === id ? { ...item, status: newStatus } : item));
+        }
     };
 
     const filteredMenu = menuItems.filter(item => 

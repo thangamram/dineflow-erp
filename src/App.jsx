@@ -6,11 +6,11 @@ import LoginPage from './pages/LoginPage';
 
 // Owner Pages
 import DashboardPage from './pages/owner/DashboardPage';
-import MenuPage from './pages/MenuPage';
+import MenuPage from './pages/owner/MenuPage';
 import InventoryManagement from './pages/owner/InventoryManagement';
 import ProcurementPage from './pages/owner/ProcurementPage';
 import StaffPage from './pages/owner/StaffPage';
-import TablesPage from './pages/TablesPage';
+import TablesPage from './pages/owner/TablesPage';
 import ReportsPage from './pages/owner/ReportsPage';
 import SettingsPage from './pages/owner/SettingsPage';
 import PayrollManagement from './pages/owner/PayrollManagement';
