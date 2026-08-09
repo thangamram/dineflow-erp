@@ -27,21 +27,26 @@ const WaiterOrders = () => {
 
   const fetchOrders = useCallback(async (myTables) => {
     try {
-      const response = await api.get('/api/v1/orders');
-      if (response && response.length > 0) {
-        setOrders(response);
-      } else {
-        throw new Error('Empty API response');
-      }
-    } catch (err) {
-      const storedMock = localStorage.getItem('mockOrders');
-      let allOrders = [];
-      if (storedMock) {
-        allOrders = JSON.parse(storedMock);
-      } else {
-        allOrders = [];
-      }
+      const activeRes = await api.get('/orders/active');
+      const mapped = (activeRes || []).map(bo => ({
+        id: bo.id.toString(),
+        tableNumber: bo.tableNumber || bo.tableId || '?',
+        status: bo.status,
+        remarks: bo.remarks,
+        items: (bo.items || []).map(bi => ({
+          name: bi.itemName,
+          quantity: bi.quantity
+        })),
+        total: bo.totalAmount,
+        time: bo.placedAt ? new Date(bo.placedAt).toLocaleTimeString() : new Date().toLocaleTimeString()
+      }));
       
+      const myTableNumbers = myTables.map(t => String(t.number));
+      setOrders(mapped.filter(o => myTableNumbers.includes(String(o.tableNumber))));
+    } catch (err) {
+      console.error('Failed to fetch orders from API:', err);
+      const storedMock = localStorage.getItem('mockOrders');
+      let allOrders = storedMock ? JSON.parse(storedMock) : [];
       const myTableNumbers = myTables.map(t => String(t.number));
       setOrders(allOrders.filter(o => myTableNumbers.includes(String(o.tableNumber))));
     } finally {
@@ -83,6 +88,12 @@ const WaiterOrders = () => {
 
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
+      await api.patch(`/orders/${orderId}/status`, { status: newStatus });
+      const myTables = await fetchTables();
+      await fetchOrders(myTables);
+    } catch (err) {
+      console.error('Failed to update order status:', err);
+      // Fallback
       const storedMock = localStorage.getItem('mockOrders');
       if (storedMock) {
         const allOrders = JSON.parse(storedMock);
@@ -90,9 +101,6 @@ const WaiterOrders = () => {
         localStorage.setItem('mockOrders', JSON.stringify(updatedMock));
       }
       setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
-      await api.patch(`/api/v1/orders/${orderId}/status`, { status: newStatus });
-    } catch (err) {
-      console.error('Failed to update order status', err);
     }
   };
 

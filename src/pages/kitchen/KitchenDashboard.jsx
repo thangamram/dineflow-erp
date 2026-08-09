@@ -1,20 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle, ChefHat, Timer, Flame, CheckCircle2, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import api from '../../api';
 
 export default function KitchenDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Poll for orders from localStorage
-  const fetchOrders = () => {
+  // Poll for orders from REST API
+  const fetchOrders = async () => {
     try {
+      const activeRes = await api.get('/orders/active');
+      const mapped = (activeRes || []).map(bo => ({
+        id: bo.id.toString(),
+        tableNumber: bo.tableNumber || bo.tableId || '?',
+        status: bo.status,
+        remarks: bo.remarks,
+        items: (bo.items || []).map(bi => ({
+          name: bi.itemName,
+          quantity: bi.quantity
+        })),
+        time: bo.placedAt ? new Date(bo.placedAt).toLocaleTimeString() : new Date().toLocaleTimeString()
+      }));
+      setOrders(mapped);
+    } catch (error) {
+      console.error('Failed to parse orders:', error);
+      // Fallback
       const storedOrders = localStorage.getItem('mockOrders');
       if (storedOrders) {
         setOrders(JSON.parse(storedOrders));
       }
-    } catch (error) {
-      console.error('Failed to parse orders:', error);
     } finally {
       setLoading(false);
     }
@@ -69,24 +84,30 @@ export default function KitchenDashboard() {
     }
   };
 
-  const updateOrderStatus = (id, newStatus) => {
+  const updateOrderStatus = async (id, newStatus) => {
     try {
+      // Find order for inventory logic
+      const orderToUpdate = orders.find(o => o.id === id);
+      if (newStatus === 'PREPARING' && orderToUpdate && orderToUpdate.status !== 'PREPARING') {
+          deductInventoryForOrder(orderToUpdate);
+      }
+
+      await api.patch(`/orders/${id}/status`, { status: newStatus });
+      fetchOrders();
+    } catch (err) {
+      console.error('Failed to update status', err);
+      // Fallback
       const storedOrders = localStorage.getItem('mockOrders');
       if (storedOrders) {
         const allOrders = JSON.parse(storedOrders);
         const orderToUpdate = allOrders.find(o => o.id === id);
-        
-        // Auto-deduct inventory if changing to PREPARING
         if (newStatus === 'PREPARING' && orderToUpdate && orderToUpdate.status !== 'PREPARING') {
             deductInventoryForOrder(orderToUpdate);
         }
-
         const updatedOrders = allOrders.map(o => o.id === id ? { ...o, status: newStatus } : o);
         localStorage.setItem('mockOrders', JSON.stringify(updatedOrders));
         setOrders(updatedOrders);
       }
-    } catch (err) {
-      console.error('Failed to update status', err);
     }
   };
 

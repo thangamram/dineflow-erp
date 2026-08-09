@@ -50,23 +50,36 @@ export default function OrderTracking() {
       return;
     }
 
-    const checkOrderStatus = () => {
+    const checkOrderStatus = async () => {
+      const orderId = localStorage.getItem('lastPlacedOrderId');
+      if (orderId) {
+        try {
+          const order = await api.get(`/orders/${orderId}`);
+          if (order) {
+            let overallStatus = 'PLACED';
+            if (['NEW', 'RECEIVED', 'PENDING', 'WAITING'].includes(order.status)) overallStatus = 'PLACED';
+            else if (['PREPARING', 'ACCEPTED'].includes(order.status)) overallStatus = 'PREPARING';
+            else if (order.status === 'READY') overallStatus = 'READY';
+            else if (['DELIVERED', 'COMPLETED', 'BILLED', 'PAID', 'CLOSED'].includes(order.status)) overallStatus = 'DELIVERED';
+            setStatus(overallStatus);
+            return;
+          }
+        } catch (e) {
+          console.error("Failed to fetch order status from API:", e);
+        }
+      }
+
       const storedOrders = localStorage.getItem('mockOrders');
       if (storedOrders) {
         const allOrders = JSON.parse(storedOrders);
-        // Find the most recent orders for this specific session and table
         const myOrders = allOrders.filter(o => o.tableNumber === String(tableNumber) && o.sessionId === sessionId);
         if (myOrders.length > 0) {
-          // Get the lowest status from all their active items
-          // Priority: PENDING < PREPARING < READY < DELIVERED
           const statuses = myOrders.map(o => o.status);
           let overallStatus = 'PLACED';
-          
           if (statuses.includes('PENDING') || statuses.includes('NEW') || statuses.includes('RECEIVED') || statuses.includes('WAITING')) overallStatus = 'PLACED';
           else if (statuses.includes('PREPARING') || statuses.includes('ACCEPTED')) overallStatus = 'PREPARING';
           else if (statuses.includes('READY')) overallStatus = 'READY';
           else if (statuses.includes('DELIVERED') || statuses.includes('COMPLETED')) overallStatus = 'DELIVERED';
-          
           setStatus(overallStatus);
         }
       }

@@ -221,26 +221,55 @@ export default function CustomerPortal() {
     }
   };
 
-  const fetchMenu = () => {
-    setLoading(true);
-    const storedMenu = localStorage.getItem('mockMenu');
-    
-    if (storedMenu) {
-      const items = JSON.parse(storedMenu);
-      // Only show items that are marked as available
-      const activeItems = items.filter(item => item.isAvailable !== false);
-      
-      setMenu(activeItems);
-      const cats = [...new Set(activeItems.map(item => item.category))];
-      setCategories(cats);
-      if (cats.length > 0) setActiveCategory(cats[0]);
-    } else {
-      // If it hasn't been initialized at all, show empty
-      setMenu([]);
-      setCategories([]);
+  const getAuthToken = async () => {
+    let token = localStorage.getItem('token');
+    if (!token) {
+      try {
+        const authData = await api.post('/auth/login', {
+          usernameOrEmailOrMobile: 'customer1',
+          password: 'password123'
+        });
+        token = authData.accessToken;
+        localStorage.setItem('token', token);
+      } catch (err) {
+        console.error('Silent customer login failed:', err);
+      }
     }
-    
-    setLoading(false);
+    return token;
+  };
+
+  const fetchMenu = async () => {
+    setLoading(true);
+    try {
+      await getAuthToken();
+      const cats = await api.get('/categories');
+      const itemsResponse = await api.get('/menu-items?size=200');
+      const activeItems = (itemsResponse.content || []).map(item => ({
+        id: item.id.toString(),
+        name: item.name,
+        category: item.categoryName || 'General',
+        price: Number(item.price || 0),
+        type: item.dietaryType === 'VEG' ? 'veg' : 'non-veg',
+        isAvailable: item.available
+      }));
+      setMenu(activeItems);
+      setCategories(cats.map(c => c.name));
+      if (cats.length > 0) setActiveCategory(cats[0].name);
+    } catch (err) {
+      console.error('Failed to fetch menu:', err);
+      // Fallback to local storage if API fails
+      const storedMenu = localStorage.getItem('mockMenu');
+      if (storedMenu) {
+        const items = JSON.parse(storedMenu);
+        const activeItems = items.filter(item => item.isAvailable !== false);
+        setMenu(activeItems);
+        const cats = [...new Set(activeItems.map(item => item.category))];
+        setCategories(cats);
+        if (cats.length > 0) setActiveCategory(cats[0]);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const updateCart = (item, delta) => {
@@ -262,10 +291,42 @@ export default function CustomerPortal() {
   const gstAmount = cartTotal * 0.05; // 5% GST
   const grandTotal = cartTotal + gstAmount;
 
-  const handleConfirmOrder = () => {
+  const handleConfirmOrder = async () => {
     try {
+      await getAuthToken();
+      
+      // Get table ID
+      const tables = await api.get('/tables');
+      const table = tables.find(t => String(t.tableNumber) === String(tableNumber) || String(t.id) === String(tableNumber));
+      const tableId = table ? table.id : 1;
+
+      // Post order
+      const itemsPayload = Object.values(cart).map(c => ({
+        menuItemId: Number(c.id),
+        quantity: c.quantity,
+        specialInstructions: specialNote
+      }));
+
+      const res = await api.post('/orders', {
+        tableId: tableId,
+        orderType: 'DINE_IN',
+        remarks: specialNote,
+        items: itemsPayload
+      });
+
+      // Save order ID locally so tracking knows what to poll
+      if (res && res.id) {
+        localStorage.setItem('lastPlacedOrderId', res.id.toString());
+      }
+
+      // Update local table status
+      if (table) {
+        await api.patch(`/tables/${table.id}/status?status=OCCUPIED`).catch(() => {});
+      }
+
+      // Add to local mock orders for fallback backward compatibility
       const newOrder = {
-        id: `ORD-${Math.floor(Math.random() * 9000) + 1000}`,
+        id: res?.id?.toString() || `ORD-${Math.floor(Math.random() * 9000) + 1000}`,
         tableNumber: String(tableNumber),
         sessionId: sessionId,
         status: 'PENDING',
@@ -274,24 +335,16 @@ export default function CustomerPortal() {
         total: grandTotal,
         time: new Date().toLocaleTimeString()
       };
-
       const storedOrders = localStorage.getItem('mockOrders');
       const allOrders = storedOrders ? JSON.parse(storedOrders) : [];
       localStorage.setItem('mockOrders', JSON.stringify([newOrder, ...allOrders]));
-      
-      // Mark table as Customer Dining
-      const storedTables = localStorage.getItem('mockTables');
-      if (storedTables) {
-        const tables = JSON.parse(storedTables);
-        const updatedTables = tables.map(t => String(t.number) === tableNumber ? { ...t, status: 'Customer Dining' } : t);
-        localStorage.setItem('mockTables', JSON.stringify(updatedTables));
-      }
 
       setCart({});
       setShowCartModal(false);
       navigate('/customer/track');
     } catch (err) {
       console.error('Failed to place order:', err);
+      alert('Failed to place order: ' + (err.response?.data?.message || err.message));
     }
   };
 

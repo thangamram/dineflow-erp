@@ -147,35 +147,36 @@ export default function BillingDashboard() {
   const fetchBills = useCallback(async () => {
     setLoading(true);
     try {
-      const pendingRes = await api.get('/api/v1/bills/pending').catch(() => null);
-      const paidRes = await api.get('/api/v1/bills/paid').catch(() => null);
+      const activeRes = await api.get('/orders/active');
+      const billingOrders = (activeRes || [])
+        .filter(o => ['READY', 'DELIVERED', 'COMPLETED'].includes(o.status))
+        .map(bo => ({
+          id: bo.id,
+          table: `Table ${bo.tableNumber || bo.tableId || '?'}`,
+          tableId: bo.tableId,
+          sessionId: bo.orderNumber,
+          status: 'pending',
+          items: (bo.items || []).map(bi => ({
+            name: bi.itemName,
+            qty: bi.quantity,
+            price: Number(bi.unitPrice || 0)
+          }))
+        }));
+      setPendingBills(billingOrders);
 
-      if (Array.isArray(pendingRes) && pendingRes.length > 0) {
-        setPendingBills(pendingRes);
-      } else {
-        const stored = localStorage.getItem('cashierPending');
-        let parsedStored = [];
-        try { parsedStored = JSON.parse(stored) || []; } catch(e) {}
-        
-        if (parsedStored.length > 0) {
-          setPendingBills(parsedStored);
-        } else {
-          setPendingBills([]);
-        }
-      }
-
-      if (Array.isArray(paidRes) && paidRes.length > 0) {
-        setPaidBills(paidRes);
-      } else {
-        const stored = localStorage.getItem('cashierPaid');
-        let parsedStored = [];
-        try { parsedStored = JSON.parse(stored) || []; } catch(e) {}
-
-        if (parsedStored.length > 0) {
-          setPaidBills(parsedStored);
-        } else {
-          setPaidBills([]);
-        }
+      // Fetch paid bills
+      const allBillsPage = await api.get('/bills?size=50').catch(() => null);
+      if (allBillsPage && allBillsPage.content) {
+        const paid = allBillsPage.content
+          .filter(b => b.status === 'PAID')
+          .map(b => ({
+            id: b.id,
+            table: `Table ${b.tableNumber || b.customerId || '?'}`,
+            total: b.grandTotal,
+            paymentMethod: 'Paid',
+            paidAt: b.generatedAt
+          }));
+        setPaidBills(paid);
       }
     } catch (err) {
       console.error('Failed to fetch bills', err);
@@ -219,55 +220,54 @@ export default function BillingDashboard() {
   };
 
   // Step 2: Confirm Bill → show payment
-  const handleConfirmBill = (confirmedBill) => {
-    setPreviewBill(null);
-    setPaymentBill(confirmedBill);
+  const handleConfirmBill = async (confirmedBill) => {
+    try {
+      const res = await api.post('/bills', { orderId: Number(confirmedBill.id) });
+      setPreviewBill(null);
+      setPaymentBill({
+        ...confirmedBill,
+        billId: res.id,
+        total: res.grandTotal,
+        gst: res.gstAmount,
+        serviceCharge: res.serviceCharge
+      });
+    } catch (err) {
+      console.error('Failed to generate bill on backend:', err);
+      alert('Failed to generate bill on backend: ' + (err.response?.data?.message || err.message));
+    }
   };
 
   // Step 3: Confirm Payment → show post-payment
   const handlePayBill = async (billId, method, amount) => {
+    const activeBillId = paymentBill.billId || billId;
     try {
-      await api.post(`/api/v1/bills/${billId}/pay`, { method, amount }).catch(() => {});
-    } catch (err) {
-      console.error('API pay error (continuing locally)', err);
-    }
-
-    const bill = pendingBills.find(b => b.id === billId);
-    if (bill) {
-      const paidBill = { ...bill, status: 'paid', paymentMethod: method, total: amount, paidAt: new Date().toISOString() };
-      const newPending = pendingBills.filter(b => b.id !== billId);
-      const newPaid = [paidBill, ...paidBills];
-
-      setPendingBills(newPending);
-      setPaidBills(newPaid);
-      localStorage.setItem('cashierPending', JSON.stringify(newPending));
-      localStorage.setItem('cashierPaid', JSON.stringify(newPaid));
-
+      await api.post(`/bills/${activeBillId}/mark-paid`);
+      
+      const bill = pendingBills.find(b => b.id === paymentBill.id);
+      if (bill) {
+        const paidBill = { ...bill, status: 'paid', paymentMethod: method, total: amount, paidAt: new Date().toISOString() };
+        setPaidBills(prev => [paidBill, ...prev]);
+        setPendingBills(prev => prev.filter(b => b.id !== paymentBill.id));
+      }
+      
       setPaymentBill(null);
-      setCompletedBill(paidBill);
+      setCompletedBill({ ...paymentBill, paymentMethod: method });
+    } catch (err) {
+      console.error('Failed to settle payment on backend:', err);
+      alert('Failed to settle payment on backend: ' + (err.response?.data?.message || err.message));
     }
   };
 
   // Step 4: Complete Transaction → update cross-portal state
-  const handleCompleteTransaction = (bill) => {
+  const handleCompleteTransaction = async (bill) => {
     setCompletedBill(null);
-
-      // Make Table Paid / Needs Cleaning
-      const tableNum = bill.table.replace('Table ', '');
-      const storedTables = localStorage.getItem('mockTables');
-      if (storedTables) {
-         const tables = JSON.parse(storedTables);
-         const updatedTables = tables.map(t => String(t.number) === tableNum ? { ...t, status: 'Paid / Needs Cleaning' } : t);
-         localStorage.setItem('mockTables', JSON.stringify(updatedTables));
+    try {
+      if (bill.tableId) {
+        await api.patch(`/tables/${bill.tableId}/status?status=AVAILABLE`).catch(() => {});
       }
-
-    // Update orders to COMPLETED
-    const storedOrders = localStorage.getItem('mockOrders');
-    if (storedOrders) {
-      const orders = JSON.parse(storedOrders);
-      const tableNum = bill.table.replace('Table ', '');
-      const updated = orders.map(o => o.tableNumber === tableNum ? { ...o, status: 'COMPLETED' } : o);
-      localStorage.setItem('mockOrders', JSON.stringify(updated));
+      fetchBills();
+    } catch (e) {
+      console.error(e);
     }
   };
 
