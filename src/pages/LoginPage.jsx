@@ -64,17 +64,38 @@ const LoginPage = () => {
     try {
       const searchUsername = username.trim();
       const searchPassword = password.trim();
-      
+
+      // ── Step 1: Check if the entered username matches an Employee ID in mockStaff ──
+      const storedStaff = localStorage.getItem('mockStaff');
+      if (storedStaff) {
+        const staffList = JSON.parse(storedStaff);
+        // Match by employeeId OR username field (case-insensitive)
+        const matched = staffList.find(s =>
+          s.employeeId?.toLowerCase() === searchUsername.toLowerCase() ||
+          s.username?.toLowerCase() === searchUsername.toLowerCase()
+        );
+        if (matched) {
+          if (matched.password !== searchPassword) {
+            setError('Invalid Employee ID or password. Please try again.');
+            setLoading(false);
+            return;
+          }
+          // Successful local staff login
+          handleLoginSuccess(matched);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // ── Step 2: Owner login shortcut ──
       let finalUsername = searchUsername;
       let finalPassword = searchPassword;
-      
-      // Map owner/Admin@123 to backend database admin credentials
       if (searchUsername.toLowerCase() === 'owner' && searchPassword === 'Admin@123') {
         finalUsername = 'admin';
         finalPassword = 'password123';
       }
 
-      // Backend API login
+      // ── Step 3: Backend API login (for owner and backend users) ──
       const data = await api.post('/auth/login', {
         usernameOrEmailOrMobile: finalUsername,
         password: finalPassword
@@ -86,7 +107,6 @@ const LoginPage = () => {
       else if (role === 'ROLE_KITCHEN') roleName = 'Kitchen';
       else if (role === 'ROLE_CASHIER') roleName = 'Cashier';
 
-      // Log success locally
       const auditLogs = JSON.parse(localStorage.getItem('mockAuditLogs') || '[]');
       auditLogs.unshift({
         id: Date.now(),
