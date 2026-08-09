@@ -25,7 +25,7 @@ export default function TablesPage() {
                     number: t.tableNumber || String(t.id),
                     capacity: t.capacity || t.seats || 4,
                     status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Customer Dining' : 'Needs Cleaning',
-                    assignedWaiter: assignments[t.id] || '',
+                    assignedWaiter: t.assignedWaiter || assignments[t.id] || '',
                     qrToken: t.qrToken || String(t.id)
                 }));
             setTables(mapped);
