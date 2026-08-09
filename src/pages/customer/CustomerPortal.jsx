@@ -31,14 +31,17 @@ export default function CustomerPortal() {
   const loadTables = async () => {
     try {
       const dbTables = await api.get('/tables');
-      const mapped = (dbTables || []).map(t => ({
-        id: t.id,
-        number: t.tableNumber || String(t.id),
-        capacity: t.capacity || t.seats || 4,
-        status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Occupied' : 'Cleaning',
-        assignedWaiter: t.assignedWaiter || '',
-        qrToken: t.qrToken || String(t.id)
-      }));
+      const deletedIds = (JSON.parse(localStorage.getItem('deletedTableIds') || '[]')).map(String);
+      const mapped = (dbTables || [])
+        .filter(t => !deletedIds.includes(String(t.id)))
+        .map(t => ({
+          id: t.id,
+          number: t.tableNumber || String(t.id),
+          capacity: t.capacity || t.seats || 4,
+          status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Occupied' : 'Cleaning',
+          assignedWaiter: t.assignedWaiter || '',
+          qrToken: t.qrToken || String(t.id)
+        }));
       setAvailableTables(mapped);
       return mapped;
     } catch (e) {
@@ -285,14 +288,18 @@ export default function CustomerPortal() {
       await getAuthToken();
       const cats = await api.get('/categories');
       const itemsResponse = await api.get('/menu-items?size=200');
-      const activeItems = (itemsResponse.content || []).map(item => ({
-        id: item.id.toString(),
-        name: item.name,
-        category: item.categoryName || 'General',
-        price: Number(item.price || 0),
-        type: item.dietaryType === 'VEG' ? 'veg' : 'non-veg',
-        isAvailable: item.available
-      }));
+      const deletedMenuIds = (JSON.parse(localStorage.getItem('deletedMenuItemIds') || '[]')).map(String);
+      const activeItems = (itemsResponse.content || [])
+        .filter(item => !deletedMenuIds.includes(String(item.id)))
+        .filter(item => item.available !== false)
+        .map(item => ({
+          id: item.id.toString(),
+          name: item.name,
+          category: item.categoryName || 'General',
+          price: Number(item.price || 0),
+          type: item.dietaryType === 'VEG' ? 'veg' : 'non-veg',
+          isAvailable: item.available
+        }));
       setMenu(activeItems);
       setCategories(cats.map(c => c.name));
       if (cats.length > 0) setActiveCategory(cats[0].name);
@@ -302,7 +309,10 @@ export default function CustomerPortal() {
       const storedMenu = localStorage.getItem('mockMenu');
       if (storedMenu) {
         const items = JSON.parse(storedMenu);
-        const activeItems = items.filter(item => item.isAvailable !== false);
+        const deletedMenuIds = (JSON.parse(localStorage.getItem('deletedMenuItemIds') || '[]')).map(String);
+        const activeItems = items
+          .filter(item => !deletedMenuIds.includes(String(item.id)))
+          .filter(item => item.isAvailable !== false);
         setMenu(activeItems);
         const cats = [...new Set(activeItems.map(item => item.category))];
         setCategories(cats);
