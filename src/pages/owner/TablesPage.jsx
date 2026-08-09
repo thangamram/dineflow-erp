@@ -16,12 +16,13 @@ export default function TablesPage() {
     const loadData = async () => {
         try {
             const backendTables = await api.get('/tables');
+            const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
             const mapped = (backendTables || []).map(t => ({
                 id: t.id,
                 number: t.tableNumber || String(t.id),
                 capacity: t.capacity || t.seats || 4,
                 status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Customer Dining' : 'Needs Cleaning',
-                assignedWaiter: t.assignedWaiter || '',
+                assignedWaiter: assignments[t.id] || '',
                 qrToken: t.qrToken || String(t.id)
             }));
             setTables(mapped);
@@ -110,19 +111,21 @@ export default function TablesPage() {
     
     const handleAssignWaiter = async (tableId, waiterUsername) => {
         try {
+            const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
+            assignments[tableId] = waiterUsername;
+            localStorage.setItem('tableWaiterAssignments', JSON.stringify(assignments));
+
             const t = tables.find(tbl => tbl.id === tableId);
             await api.put(`/tables/${tableId}`, {
                 tableNumber: t.number,
                 capacity: t.capacity,
                 status: t.status === 'Available' ? 'AVAILABLE' : t.status === 'Customer Dining' ? 'OCCUPIED' : 'CLEANING',
-                assignedWaiter: waiterUsername,
                 qrToken: t.qrToken
             });
             setActiveAssignmentMenu(null);
             loadData();
         } catch (err) {
             console.error('Failed to assign waiter:', err);
-            saveTables(tables.map(t => t.id === tableId ? { ...t, assignedWaiter: waiterUsername } : t));
             setActiveAssignmentMenu(null);
         }
     };
