@@ -17,12 +17,17 @@ export default function SettingsPage() {
     const handleWipeData = async () => {
         if (confirm("WARNING: This will wipe all data (Tables, Menu, Inventory, Orders, Staff) from both the browser and the database. Do you want to proceed and launch a fresh ERP?")) {
             
-            // Delete all tables from the database REST API
+            // Delete all tables from the database REST API, or reset them to AVAILABLE if delete fails
             try {
                 const tables = await api.get('/tables');
                 if (Array.isArray(tables)) {
                     for (const t of tables) {
-                        await api.delete(`/tables/${t.id}`).catch(() => {});
+                        try {
+                            await api.delete(`/tables/${t.id}`);
+                        } catch (err) {
+                            // Reset status to AVAILABLE if database history prevents deletion
+                            await api.patch(`/tables/${t.id}/status?status=AVAILABLE`).catch(() => {});
+                        }
                     }
                 }
             } catch (e) {
