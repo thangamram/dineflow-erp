@@ -17,14 +17,20 @@ export default function TablesPage() {
         try {
             const backendTables = await api.get('/tables');
             const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
+
+            // Backend is the source of truth — if it returned a table, it exists.
+            // Auto-clean any stale deletedTableIds that still exist on the backend
+            const backendIds = (backendTables || []).map(t => String(t.id));
             const deletedIds = (JSON.parse(localStorage.getItem('deletedTableIds') || '[]')).map(String);
+            const cleanedDeletedIds = deletedIds.filter(id => !backendIds.includes(id));
+            localStorage.setItem('deletedTableIds', JSON.stringify(cleanedDeletedIds));
+
             const mapped = (backendTables || [])
-                .filter(t => !deletedIds.includes(String(t.id)))
                 .map(t => ({
                     id: t.id,
                     number: t.tableNumber || String(t.id),
                     capacity: t.capacity || t.seats || 4,
-                    status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Customer Dining' : 'Needs Cleaning',
+                    status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Customer Dining' : t.status === 'CLEANING' ? 'Needs Cleaning' : 'Available',
                     assignedWaiter: t.assignedWaiter || assignments[t.id] || '',
                     qrToken: t.qrToken || String(t.id)
                 }));
