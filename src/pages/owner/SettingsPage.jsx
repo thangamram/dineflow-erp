@@ -15,12 +15,8 @@ export default function SettingsPage() {
 
     const handleWipeData = () => {
         if (confirm("WARNING: This will wipe all mock data (Tables, Menu, Inventory, Orders, Staff). Your global settings will be kept. Do you want to proceed and launch a fresh ERP?")) {
-            
-            const defaultTable = [{ id: '1', number: '1', capacity: 4, status: 'Available', assignedWaiter: 'waiter@dineflow.com' }];
-            const defaultMenu = [{ id: '1', name: 'Chicken Biryani', category: 'Mains', price: 280, type: 'non-veg', status: 'Active' }];
-            
-            localStorage.setItem('mockTables', JSON.stringify(defaultTable));
-            localStorage.setItem('mockMenu', JSON.stringify(defaultMenu));
+            localStorage.setItem('mockTables', '[]');
+            localStorage.setItem('mockMenu', '[]');
             localStorage.setItem('mockInventory', '[]');
             localStorage.setItem('mockVendors', '[]');
             localStorage.setItem('mockInventoryLogs', '[]');
@@ -30,7 +26,11 @@ export default function SettingsPage() {
             localStorage.setItem('mockStaff', '[]');
             localStorage.setItem('cashierPaid', '[]');
             localStorage.setItem('cashierPending', '[]');
-            alert("ERP successfully wiped! You can now start adding your real restaurant data.");
+            localStorage.removeItem('onboardingCompleted');
+            localStorage.removeItem('onboardingStep');
+            localStorage.removeItem('onboardingData');
+            localStorage.removeItem('lastPlacedOrderId');
+            alert("ERP successfully wiped! All local mock data has been deleted.");
             window.location.reload();
         }
     };
