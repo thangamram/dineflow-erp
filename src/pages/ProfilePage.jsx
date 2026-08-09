@@ -22,13 +22,26 @@ const ProfilePage = () => {
   }, []);
 
   const loadUser = () => {
-    const username = localStorage.getItem('username');
+    const username = localStorage.getItem('username') || 'owner';
     const staffList = JSON.parse(localStorage.getItem('mockStaff') || '[]');
     const currentUser = staffList.find(s => s.username === username);
     if (currentUser) {
       setUser(currentUser);
       setPhone(currentUser.phone || '');
       setEmail(currentUser.email || '');
+    } else {
+      const fallbackUser = {
+        id: 'admin-id',
+        name: username === 'admin' ? 'Administrator' : username,
+        username: username,
+        role: localStorage.getItem('role') || 'ROLE_ADMIN',
+        phone: '9876543210',
+        email: username + '@dineflow.com',
+        status: 'Active'
+      };
+      setUser(fallbackUser);
+      setPhone(fallbackUser.phone);
+      setEmail(fallbackUser.email);
     }
   };
 
