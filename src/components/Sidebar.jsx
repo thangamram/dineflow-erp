@@ -40,7 +40,6 @@ const Sidebar = () => {
           { path: '/owner/leave', label: 'Leave Mgmt', icon: FileText },
           { path: '/owner/tables', label: 'Tables', icon: Grid3x3 },
           { path: '/owner/reports', label: 'Reports', icon: BarChart3 },
-          { path: '/owner/audit-logs', label: 'Audit Logs', icon: ClipboardList },
           { path: '/owner/settings', label: 'Settings', icon: Settings },
         ];
       case 'ROLE_WAITER':
