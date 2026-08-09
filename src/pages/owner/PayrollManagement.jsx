@@ -63,7 +63,7 @@ export default function PayrollManagement() {
     };
 
     // Derived values
-    const selectedStaff = staff.find(s => String(s.id) === String(formData.employeeId));
+    const selectedStaff = staff.find(s => String(s.id) === String(formData.employeeId) || String(s.employeeId) === String(formData.employeeId));
     const overtimePay = (parseFloat(formData.overtimeHours) || 0) * (parseFloat(formData.overtimeRate) || 0);
     const netSalary = (parseFloat(formData.basicSalary) || 0) + 
                       (parseFloat(formData.allowances) || 0) + 
@@ -72,7 +72,7 @@ export default function PayrollManagement() {
                       (parseFloat(formData.deductions) || 0);
 
     const handleEmployeeSelect = (id) => {
-        const employee = staff.find(s => String(s.id) === String(id));
+        const employee = staff.find(s => String(s.id) === String(id) || String(s.employeeId) === String(id));
         const baseSalary = employee ? parseFloat(employee.salary) || 0 : 0;
         
         let autoDeduction = 0;
@@ -151,21 +151,21 @@ export default function PayrollManagement() {
         savePayrolls(updated);
         
         const targetPayroll = payrolls.find(p => p.id === id);
-        const emp = staff.find(s => String(s.id) === String(targetPayroll.employeeId));
+        const emp = staff.find(s => String(s.id) === String(targetPayroll.employeeId) || String(s.employeeId) === String(targetPayroll.employeeId));
         addLog(`Marked as ${newStatus}`, `${emp?.name} - ${targetPayroll?.period}`);
     };
 
     const deletePayroll = (id) => {
         if(confirm('Are you sure you want to delete this draft payroll?')) {
             const targetPayroll = payrolls.find(p => p.id === id);
-            const emp = staff.find(s => String(s.id) === String(targetPayroll.employeeId));
+            const emp = staff.find(s => String(s.id) === String(targetPayroll.employeeId) || String(s.employeeId) === String(targetPayroll.employeeId));
             savePayrolls(payrolls.filter(p => p.id !== id));
             addLog('Deleted Payroll', `${emp?.name} - ${targetPayroll?.period}`);
         }
     };
 
     const generatePayslipPDF = (payroll) => {
-        const emp = staff.find(s => String(s.id) === String(payroll.employeeId));
+        const emp = staff.find(s => String(s.id) === String(payroll.employeeId) || String(s.employeeId) === String(payroll.employeeId));
         const doc = new jsPDF();
         
         doc.setFontSize(22);
@@ -245,7 +245,7 @@ export default function PayrollManagement() {
     const paidCount = currentMonthPayrolls.filter(p => p.status === 'Paid').length;
 
     const filteredPayrolls = payrolls.filter(p => {
-        const emp = staff.find(s => String(s.id) === String(p.employeeId));
+        const emp = staff.find(s => String(s.id) === String(p.employeeId) || String(s.employeeId) === String(p.employeeId));
         return emp?.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.period.toLowerCase().includes(searchTerm.toLowerCase());
     });
 
@@ -332,7 +332,7 @@ export default function PayrollManagement() {
                             {filteredPayrolls.length === 0 ? (
                                 <tr><td colSpan="5" className="p-8 text-center text-gray-400 font-medium">No payroll records found.</td></tr>
                             ) : filteredPayrolls.map(payroll => {
-                                const emp = staff.find(s => String(s.id) === String(payroll.employeeId));
+                                const emp = staff.find(s => String(s.id) === String(payroll.employeeId) || String(s.employeeId) === String(payroll.employeeId));
                                 return (
                                     <tr key={payroll.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="p-4">
