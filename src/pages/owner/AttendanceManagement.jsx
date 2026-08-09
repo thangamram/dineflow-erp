@@ -78,7 +78,7 @@ const AttendanceManagement = () => {
     absent: attendance.filter(a => a.status === 'Absent').length,
     halfDay: attendance.filter(a => a.status === 'Half Day').length,
     leave: attendance.filter(a => a.status === 'On Leave').length,
-    unmarked: staff.length - attendance.length
+    unmarked: Math.max(0, staff.length - attendance.length)
   };
 
   return (

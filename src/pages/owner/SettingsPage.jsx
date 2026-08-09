@@ -35,17 +35,26 @@ export default function SettingsPage() {
                 }
             } catch (e) { console.error('Failed to clear bills:', e); }
 
-            // 3. Delete all tables
+            // 3. Delete all tables - track ones that still can't be deleted (FK) and hide them
+            const failedTableIds = [];
             try {
                 const tables = await api.get('/tables').catch(() => []);
                 if (Array.isArray(tables)) {
                     for (const t of tables) {
-                        await api.delete(`/tables/${t.id}`).catch(() => {
-                            api.patch(`/tables/${t.id}/status?status=AVAILABLE`).catch(() => {});
-                        });
+                        try {
+                            await api.delete(`/tables/${t.id}`);
+                        } catch {
+                            // Can't delete from DB - mark as AVAILABLE and hide in UI via deletedTableIds
+                            await api.patch(`/tables/${t.id}/status?status=AVAILABLE`).catch(() => {});
+                            failedTableIds.push(String(t.id));
+                        }
                     }
                 }
             } catch (e) { console.error('Failed to clear tables:', e); }
+            // Persist IDs that couldn't be DB-deleted so they stay hidden from the UI
+            if (failedTableIds.length > 0) {
+                localStorage.setItem('deletedTableIds', JSON.stringify(failedTableIds));
+            }
 
             // 4. Delete all menu items
             try {
@@ -65,16 +74,14 @@ export default function SettingsPage() {
                 }
             } catch (e) { console.error('Failed to clear menu categories:', e); }
 
-            // 6. Delete all staff (non-owner, non-admin users if endpoint exists)
+            // 6. Delete all leave requests from backend
             try {
-                const staffRes = await api.get('/staff').catch(() => []);
-                const staffList = Array.isArray(staffRes) ? staffRes : (staffRes?.content || []);
-                for (const s of staffList) {
-                    if (!['OWNER', 'ADMIN'].includes(s.role)) {
-                        await api.delete(`/staff/${s.id}`).catch(() => {});
-                    }
+                const leavesRes = await api.get('/leave-requests').catch(() => []);
+                const leaveList = Array.isArray(leavesRes) ? leavesRes : (leavesRes?.content || []);
+                for (const l of leaveList) {
+                    await api.delete(`/leave-requests/${l.id}`).catch(() => {});
                 }
-            } catch (e) { console.error('Failed to clear staff:', e); }
+            } catch (e) { console.error('Failed to clear leave requests:', e); }
 
             // 7. Clear ALL localStorage mock keys
             const mockKeys = [
@@ -82,15 +89,17 @@ export default function SettingsPage() {
                 'mockOrders', 'mockBills', 'mockStaff', 'mockAttendance', 'mockLeaves',
                 'mockPayroll', 'mockPayrollLogs', 'mockAuditLogs', 'mockNotifications',
                 'cashierPaid', 'cashierPending', 'kdsSessions', 'tableWaiterAssignments',
-                'deletedTableIds', 'lastPlacedOrderId', 'customerSessionId', 'tableNumber',
+                'lastPlacedOrderId', 'customerSessionId', 'tableNumber',
                 'onboardingCompleted', 'onboardingStep', 'onboardingData'
             ];
+            // Note: 'deletedTableIds' is intentionally kept to hide un-deletable tables
             mockKeys.forEach(key => localStorage.removeItem(key));
 
             alert("✅ All data wiped! The ERP is now clean and ready for fresh real data.");
             window.location.reload();
         }
     };
+
 
     useEffect(() => {
         const stored = localStorage.getItem('erpSettings');
