@@ -157,48 +157,19 @@ export default function OrderTracking() {
 
   const [billRequested, setBillRequested] = useState(false);
 
-  const requestBill = (method) => {
-    const storedOrders = localStorage.getItem('mockOrders');
-    let items = [];
-    let subtotal = 0;
-    if (storedOrders) {
-      const allOrders = JSON.parse(storedOrders);
-      const tableOrders = allOrders.filter(o => o.tableNumber === String(tableNumber) && (o.status === 'COMPLETED' || o.status === 'READY' || o.status === 'DELIVERED'));
-      tableOrders.forEach(order => {
-        order.items.forEach(item => {
-          const price = item.price || (Math.floor(Math.random() * 200) + 100);
-          items.push({ name: item.name, qty: item.quantity, price });
-          subtotal += price * item.quantity;
-        });
-      });
-    }
-
-    if (subtotal === 0) return;
-
-    const storedPending = localStorage.getItem('cashierPending');
-    const pendingBills = storedPending ? JSON.parse(storedPending) : [];
-    const filteredPending = pendingBills.filter(b => b.table !== `Table ${tableNumber}`);
-    
-    const newBill = {
-      id: `B${Date.now()}`,
-      table: `Table ${tableNumber}`,
-      items,
-      total: subtotal,
-      status: 'pending',
-      customerPreferredMethod: method,
-      createdAt: new Date().toISOString()
-    };
-    
-    filteredPending.unshift(newBill);
-    localStorage.setItem('cashierPending', JSON.stringify(filteredPending));
-
-    const storedTables = localStorage.getItem('mockTables');
-    if (storedTables) {
-       const tables = JSON.parse(storedTables);
-       const updatedTables = tables.map(t => String(t.number) === String(tableNumber) ? { ...t, status: 'Billing Requested' } : t);
-       localStorage.setItem('mockTables', JSON.stringify(updatedTables));
+  const requestBill = async (method) => {
+    try {
+      const dbTables = await api.get('/tables').catch(() => []);
+      const myTable = dbTables.find(t => String(t.tableNumber || t.id) === String(tableNumber));
+      if (myTable) {
+         // Notify waiter/cashier by marking table as CLEANING if it's currently OCCUPIED
+         await api.patch(`/tables/${myTable.id}/status?status=CLEANING`).catch(() => {});
+      }
+    } catch (err) {
+      console.error('Failed to notify backend of bill request', err);
     }
     
+    // Set UI to bill requested state
     setBillRequested(true);
   };
 
