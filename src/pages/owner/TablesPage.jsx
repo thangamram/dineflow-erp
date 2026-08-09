@@ -45,7 +45,7 @@ export default function TablesPage() {
             const staff = JSON.parse(storedStaff);
             setWaiters(staff.filter(s => s.role === 'Waiter' && s.status === 'Active'));
         } else {
-            setWaiters([{ id: 1, name: 'Rahul Sharma', username: 'EMP001', role: 'Waiter', status: 'Active' }]);
+            setWaiters([]);
         }
     };
 

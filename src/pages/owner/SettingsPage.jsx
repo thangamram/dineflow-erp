@@ -15,52 +15,79 @@ export default function SettingsPage() {
     const [saved, setSaved] = useState(false);
 
     const handleWipeData = async () => {
-        if (confirm("WARNING: This will wipe all data (Tables, Menu, Inventory, Orders, Staff) from both the browser and the database. Do you want to proceed and launch a fresh ERP?")) {
-            
-            // Delete all tables from the database REST API, or reset them to AVAILABLE if delete fails
+        if (confirm("WARNING: This will permanently delete ALL data (Tables, Menu, Inventory, Orders, Bills, Staff) from the database and browser. This cannot be undone. Proceed?")) {
+
+            // 1. Delete all orders first (to remove FK constraints on tables/bills)
             try {
-                const tables = await api.get('/tables');
+                const orders = await api.get('/orders/active').catch(() => []);
+                const orderList = Array.isArray(orders) ? orders : (orders?.content || []);
+                for (const o of orderList) {
+                    await api.delete(`/orders/${o.id}`).catch(() => {});
+                }
+            } catch (e) { console.error('Failed to clear orders:', e); }
+
+            // 2. Delete all bills
+            try {
+                const bills = await api.get('/bills').catch(() => []);
+                const billList = Array.isArray(bills) ? bills : (bills?.content || []);
+                for (const b of billList) {
+                    await api.delete(`/bills/${b.id}`).catch(() => {});
+                }
+            } catch (e) { console.error('Failed to clear bills:', e); }
+
+            // 3. Delete all tables
+            try {
+                const tables = await api.get('/tables').catch(() => []);
                 if (Array.isArray(tables)) {
                     for (const t of tables) {
-                        try {
-                            await api.delete(`/tables/${t.id}`);
-                        } catch (err) {
-                            // Reset status to AVAILABLE if database history prevents deletion
-                            await api.patch(`/tables/${t.id}/status?status=AVAILABLE`).catch(() => {});
-                        }
+                        await api.delete(`/tables/${t.id}`).catch(() => {
+                            api.patch(`/tables/${t.id}/status?status=AVAILABLE`).catch(() => {});
+                        });
                     }
                 }
-            } catch (e) {
-                console.error('Failed to clear database tables:', e);
-            }
+            } catch (e) { console.error('Failed to clear tables:', e); }
 
-            // Delete all menu items from the database REST API
+            // 4. Delete all menu items
             try {
-                const menuRes = await api.get('/menu-items?size=200');
-                const items = menuRes.content || [];
+                const menuRes = await api.get('/menu-items?size=200').catch(() => ({}));
+                const items = menuRes?.content || (Array.isArray(menuRes) ? menuRes : []);
                 for (const item of items) {
                     await api.delete(`/menu-items/${item.id}`).catch(() => {});
                 }
-            } catch (e) {
-                console.error('Failed to clear database menu items:', e);
-            }
+            } catch (e) { console.error('Failed to clear menu items:', e); }
 
-            localStorage.setItem('mockTables', '[]');
-            localStorage.setItem('mockMenu', '[]');
-            localStorage.setItem('mockInventory', '[]');
-            localStorage.setItem('mockVendors', '[]');
-            localStorage.setItem('mockInventoryLogs', '[]');
-            localStorage.setItem('mockOrders', '[]');
-            localStorage.setItem('mockBills', '[]');
-            localStorage.setItem('kdsSessions', '[]');
-            localStorage.setItem('mockStaff', '[]');
-            localStorage.setItem('cashierPaid', '[]');
-            localStorage.setItem('cashierPending', '[]');
-            localStorage.removeItem('onboardingCompleted');
-            localStorage.removeItem('onboardingStep');
-            localStorage.removeItem('onboardingData');
-            localStorage.removeItem('lastPlacedOrderId');
-            alert("ERP successfully wiped! You can now start adding your real restaurant data.");
+            // 5. Delete all menu categories
+            try {
+                const cats = await api.get('/menu-categories').catch(() => []);
+                const catList = Array.isArray(cats) ? cats : (cats?.content || []);
+                for (const c of catList) {
+                    await api.delete(`/menu-categories/${c.id}`).catch(() => {});
+                }
+            } catch (e) { console.error('Failed to clear menu categories:', e); }
+
+            // 6. Delete all staff (non-owner, non-admin users if endpoint exists)
+            try {
+                const staffRes = await api.get('/staff').catch(() => []);
+                const staffList = Array.isArray(staffRes) ? staffRes : (staffRes?.content || []);
+                for (const s of staffList) {
+                    if (!['OWNER', 'ADMIN'].includes(s.role)) {
+                        await api.delete(`/staff/${s.id}`).catch(() => {});
+                    }
+                }
+            } catch (e) { console.error('Failed to clear staff:', e); }
+
+            // 7. Clear ALL localStorage mock keys
+            const mockKeys = [
+                'mockTables', 'mockMenu', 'mockInventory', 'mockVendors', 'mockInventoryLogs',
+                'mockOrders', 'mockBills', 'mockStaff', 'mockAttendance', 'mockLeaves',
+                'mockPayroll', 'mockPayrollLogs', 'mockAuditLogs', 'mockNotifications',
+                'cashierPaid', 'cashierPending', 'kdsSessions', 'tableWaiterAssignments',
+                'deletedTableIds', 'lastPlacedOrderId', 'customerSessionId', 'tableNumber',
+                'onboardingCompleted', 'onboardingStep', 'onboardingData'
+            ];
+            mockKeys.forEach(key => localStorage.removeItem(key));
+
+            alert("✅ All data wiped! The ERP is now clean and ready for fresh real data.");
             window.location.reload();
         }
     };
