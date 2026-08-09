@@ -14,8 +14,8 @@ const AttendanceManagement = () => {
 
   const loadData = () => {
     const storedStaff = JSON.parse(localStorage.getItem('mockStaff') || '[]');
-    // Only show active employees
-    setStaff(storedStaff.filter(s => s.status === 'Active' && s.role !== 'Owner'));
+    // Show employees that are not owners, regardless of strict 'Active' casing (could be missing or lowercase)
+    setStaff(storedStaff.filter(s => s.role !== 'Owner' && (s.status === 'Active' || s.status === 'active' || !s.status)));
     
     const storedAttendance = JSON.parse(localStorage.getItem('mockAttendance') || '[]');
     setAttendance(storedAttendance.filter(a => a.date === selectedDate));
