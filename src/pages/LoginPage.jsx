@@ -61,16 +61,12 @@ const LoginPage = () => {
     setLoading(true);
     setError('');
     
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
     try {
-      const staffList = JSON.parse(localStorage.getItem('mockStaff') || '[]');
-      const searchUsername = username.trim().toLowerCase();
+      const searchUsername = username.trim();
       const searchPassword = password.trim();
       
       // Master root access - guarantees owner can always log in to wipe corrupted data
-      if (searchUsername === 'owner' && searchPassword === 'Admin@123') {
+      if (searchUsername.toLowerCase() === 'owner' && searchPassword === 'Admin@123') {
         handleLoginSuccess({
           id: 'OWN-0001', employeeId: 'OWN-0001', name: 'Owner Admin', 
           username: 'owner', role: 'Owner', status: 'Active', forcePasswordChange: false
@@ -78,42 +74,52 @@ const LoginPage = () => {
         return;
       }
 
-      const user = staffList.find(s => 
-        ((s.username && s.username.toLowerCase() === searchUsername) || 
-         (s.employeeId && s.employeeId.toLowerCase() === searchUsername)) && 
-        s.password === searchPassword
-      );
+      // Backend API login
+      const data = await api.post('/auth/login', {
+        usernameOrEmailOrMobile: searchUsername,
+        password: searchPassword
+      });
 
-      if (user) {
-        if (user.status !== 'Active') {
-          setError(`Account is ${user.status}. Please contact administrator.`);
-          setLoading(false);
-          return;
-        }
+      const role = data.roles[0];
+      let roleName = 'Owner';
+      if (role === 'ROLE_WAITER') roleName = 'Waiter';
+      else if (role === 'ROLE_KITCHEN') roleName = 'Kitchen';
+      else if (role === 'ROLE_CASHIER') roleName = 'Cashier';
 
-        if (user.forcePasswordChange) {
-          localStorage.setItem('tempAuthToken', user.id);
-          navigate('/force-change-password');
-        } else {
-          handleLoginSuccess(user);
-        }
-      } else {
-        // Log failed attempt
-        const auditLogs = JSON.parse(localStorage.getItem('mockAuditLogs') || '[]');
-        auditLogs.unshift({
-          id: Date.now(),
-          timestamp: new Date().toISOString(),
-          action: 'Failed Login',
-          user: username,
-          role: 'Unknown',
-          details: 'Invalid credentials'
-        });
-        localStorage.setItem('mockAuditLogs', JSON.stringify(auditLogs));
-        
-        setError('Invalid username or password');
+      // Log success locally
+      const auditLogs = JSON.parse(localStorage.getItem('mockAuditLogs') || '[]');
+      auditLogs.unshift({
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        action: 'Login',
+        user: data.username,
+        role: roleName,
+        details: 'Successful backend login'
+      });
+      localStorage.setItem('mockAuditLogs', JSON.stringify(auditLogs));
+
+      localStorage.setItem('token', data.accessToken);
+      localStorage.setItem('role', role);
+      localStorage.setItem('username', data.username);
+      localStorage.setItem('employeeId', data.fullName || data.username);
+
+      switch(role) {
+        case 'ROLE_WAITER':
+          navigate('/waiter/dashboard');
+          break;
+        case 'ROLE_KITCHEN':
+          navigate('/kitchen/dashboard');
+          break;
+        case 'ROLE_CASHIER':
+          navigate('/cashier/dashboard');
+          break;
+        default:
+          navigate('/owner/dashboard');
+          break;
       }
     } catch (err) {
-      setError('An error occurred during login');
+      console.error(err);
+      setError(err.response?.data?.message || err.message || 'Invalid username or password');
     } finally {
       setLoading(false);
     }
