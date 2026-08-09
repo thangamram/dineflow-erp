@@ -145,26 +145,58 @@ export default function BillingDashboard() {
   const [completedBill, setCompletedBill] = useState(null);
 
   const fetchBills = useCallback(async () => {
-    setLoading(true);
     try {
+      // Get all active orders — show SERVED and READY (ready for billing)
       const activeRes = await api.get('/orders/active');
       const billingOrders = (activeRes || [])
-        .filter(o => ['READY', 'DELIVERED', 'COMPLETED'].includes(o.status))
+        .filter(o => ['READY', 'SERVED', 'DELIVERED', 'COMPLETED'].includes(o.status))
         .map(bo => ({
           id: bo.id,
           table: `Table ${bo.tableNumber || bo.tableId || '?'}`,
+          tableNumber: bo.tableNumber || bo.tableId,
           tableId: bo.tableId,
-          sessionId: bo.orderNumber,
+          sessionId: bo.orderNumber || bo.id,
           status: 'pending',
           items: (bo.items || []).map(bi => ({
-            name: bi.itemName,
-            qty: bi.quantity,
-            price: Number(bi.unitPrice || 0)
+            name: bi.itemName || bi.name || 'Item',
+            qty: bi.quantity || 1,
+            price: Number(bi.unitPrice || bi.price || 0)
           }))
         }));
-      setPendingBills(billingOrders);
 
-      // Fetch paid bills
+      // Also include tables in CLEANING state (waiter sent them for billing)
+      const allTables = await api.get('/tables').catch(() => []);
+      const deletedIds = (JSON.parse(localStorage.getItem('deletedTableIds') || '[]')).map(String);
+      const cleaningTables = (allTables || [])
+        .filter(t => t.status === 'CLEANING' && !deletedIds.includes(String(t.id)));
+
+      // Merge: add any cleaning table not already in billingOrders
+      cleaningTables.forEach(t => {
+        const alreadyIn = billingOrders.some(b => String(b.tableNumber) === String(t.tableNumber));
+        if (!alreadyIn) {
+          billingOrders.push({
+            id: `tbl-${t.id}`,
+            table: `Table ${t.tableNumber}`,
+            tableNumber: t.tableNumber,
+            tableId: t.id,
+            sessionId: `T-${t.tableNumber}`,
+            status: 'pending',
+            items: [{ name: 'Items from waiter', qty: 1, price: 0 }]
+          });
+        }
+      });
+
+      // Also merge any pending bills stored locally by waiter (fallback)
+      const localPending = JSON.parse(localStorage.getItem('cashierPending') || '[]');
+      localPending.forEach(lb => {
+        const alreadyIn = billingOrders.some(b => String(b.tableNumber) === String(lb.tableNumber || lb.table?.replace('Table ', '')));
+        if (!alreadyIn) billingOrders.push(lb);
+      });
+
+      setPendingBills(billingOrders);
+      setLoading(false);
+
+      // Fetch paid bills from API
       const allBillsPage = await api.get('/bills?size=50').catch(() => null);
       if (allBillsPage && allBillsPage.content) {
         const paid = allBillsPage.content
@@ -172,31 +204,28 @@ export default function BillingDashboard() {
           .map(b => ({
             id: b.id,
             table: `Table ${b.tableNumber || b.customerId || '?'}`,
-            total: b.grandTotal,
-            paymentMethod: 'Paid',
+            total: b.grandTotal || 0,
+            paymentMethod: b.paymentMethod || 'Paid',
             paidAt: b.generatedAt
           }));
         setPaidBills(paid);
       }
     } catch (err) {
       console.error('Failed to fetch bills', err);
-    } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { 
-    fetchBills(); 
-    
-    // Listen for storage changes (like wiping data in another tab)
-    const handleStorageChange = (e) => {
-      if (e.key === 'cashierPaid' || e.key === 'cashierPending' || e.key === 'mockOrders' || e.key === 'mockBills' || e.key === null) {
-        fetchBills();
-      }
+  useEffect(() => {
+    fetchBills();
+    const interval = setInterval(fetchBills, 3000); // auto-refresh every 3s
+    window.addEventListener('storage', fetchBills);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', fetchBills);
     };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
   }, [fetchBills]);
+
 
   // WebSocket: listen for new billing requests from waiters
   useEffect(() => {
@@ -265,6 +294,13 @@ export default function BillingDashboard() {
       if (bill.tableId) {
         await api.patch(`/tables/${bill.tableId}/status?status=AVAILABLE`).catch(() => {});
       }
+      // Clear from local cashierPending too
+      const localPending = JSON.parse(localStorage.getItem('cashierPending') || '[]');
+      const filtered = localPending.filter(b =>
+        String(b.tableNumber) !== String(bill.tableNumber) &&
+        String(b.table) !== String(bill.table)
+      );
+      localStorage.setItem('cashierPending', JSON.stringify(filtered));
       fetchBills();
     } catch (e) {
       console.error(e);
