@@ -243,21 +243,26 @@ export default function CustomerPortal() {
           return;
         }
         
-        if (myTable.assignedWaiter) {
+        // Read waiter assignment from localStorage (backend Table has no assignedWaiter column)
+        const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
+        const assignedEmpId = assignments[String(myTable.id)] || myTable.assignedWaiter || '';
+
+        if (assignedEmpId) {
+          // Try to resolve name from mockStaff
           const storedStaff = localStorage.getItem('mockStaff');
-            if (storedStaff) {
-               const staff = JSON.parse(storedStaff);
-               const waiter = staff.find(s => s.username === myTable.assignedWaiter || s.id === myTable.assignedWaiter || s.employeeId === myTable.assignedWaiter);
-               if (waiter) {
-                  setWaiterName(waiter.employeeId ? waiter.employeeId : `(No Emp ID found for ${waiter.name || waiter.username})`);
-               } else {
-                  setWaiterName(`(Waiter ${myTable.assignedWaiter} not found)`);
-               }
-            } else {
-               setWaiterName(`(No staff data)`);
-            }
+          if (storedStaff) {
+            const staff = JSON.parse(storedStaff);
+            const waiter = staff.find(s =>
+              s.employeeId === assignedEmpId ||
+              s.username === assignedEmpId ||
+              String(s.id) === String(assignedEmpId)
+            );
+            setWaiterName(waiter ? (waiter.name || waiter.employeeId || assignedEmpId) : assignedEmpId);
+          } else {
+            setWaiterName(assignedEmpId);
+          }
         } else {
-           setWaiterName('Pending Assignment');
+          setWaiterName('Pending Assignment');
         }
       }
     } catch (err) {
