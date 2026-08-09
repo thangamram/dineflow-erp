@@ -1,65 +1,57 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useWebSocket } from '../../contexts/WebSocketContext';
 import api from '../../api';
-import { 
-  CheckCircle, 
-  ChefHat, 
-  Clock, 
-  Utensils, 
-  Package,
-  RefreshCw,
-  BellRing,
-  Coffee
-} from 'lucide-react';
+import { CheckCircle, ChefHat, Clock, Utensils, BellRing, Coffee, RefreshCw } from 'lucide-react';
 
 const WaiterDashboard = () => {
   const [orders, setOrders] = useState([]);
   const [assignedTables, setAssignedTables] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const { subscribeToTopic, connected } = useWebSocket();
 
-  // Load tables assigned to this waiter
+  const empId = localStorage.getItem('username') || localStorage.getItem('employeeId') || '';
+
+  // Load tables assigned to this waiter from API
   const fetchTables = useCallback(async () => {
     try {
-      const stored = localStorage.getItem('mockTables');
-      const username = localStorage.getItem('username');
-      const userRole = localStorage.getItem('role');
-      let myTables = [];
-      if (stored) {
-        const allTables = JSON.parse(stored);
-        myTables = allTables;
-        setAssignedTables(myTables);
-      } else {
-        setAssignedTables([]);
-      }
+      const allTables = await api.get('/tables');
+      const deletedIds = (JSON.parse(localStorage.getItem('deletedTableIds') || '[]')).map(String);
+      const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
+
+      const myTables = (allTables || [])
+        .filter(t => !deletedIds.includes(String(t.id)))
+        .map(t => ({
+          id: t.id,
+          number: t.tableNumber || String(t.id),
+          capacity: t.capacity || 4,
+          status: t.status === 'AVAILABLE' ? 'Available'
+                : t.status === 'OCCUPIED' ? 'Customer Dining' : 'Needs Cleaning',
+          assignedWaiter: assignments[t.id] || t.assignedWaiter || ''
+        }))
+        .filter(t => !empId || t.assignedWaiter === empId || t.assignedWaiter === '');
+
+      setAssignedTables(myTables);
       return myTables;
     } catch (err) {
       console.error('Failed to fetch tables', err);
       return [];
     }
-  }, []);
+  }, [empId]);
 
-  const fetchOrders = useCallback(async (myTables) => {
+  const fetchOrders = useCallback(async () => {
     try {
-      const response = await api.get('/api/v1/orders');
-      if (response && response.length > 0) {
-        setOrders(response);
-        setError(null);
-      } else {
-        throw new Error('Empty API response');
-      }
+      const activeRes = await api.get('/orders/active');
+      const mapped = (activeRes || []).map(bo => ({
+        id: bo.id.toString(),
+        tableNumber: bo.tableNumber || bo.tableId || '?',
+        status: bo.status,
+        remarks: bo.remarks,
+        items: (bo.items || []).map(bi => ({ name: bi.itemName, quantity: bi.quantity, price: bi.price })),
+        total: bo.totalAmount || 0,
+        time: bo.placedAt ? new Date(bo.placedAt).toLocaleTimeString() : new Date().toLocaleTimeString()
+      }));
+      setOrders(mapped);
     } catch (err) {
-      const storedMock = localStorage.getItem('mockOrders');
-      let allOrders = [];
-      if (storedMock) {
-        allOrders = JSON.parse(storedMock);
-      } else {
-        allOrders = [];
-      }
-      // Filter orders by assigned tables
-      const myTableNumbers = myTables.map(t => String(t.number));
-      setOrders(allOrders.filter(o => myTableNumbers.includes(String(o.tableNumber))));
+      console.error('Failed to fetch orders from API:', err);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -67,147 +59,147 @@ const WaiterDashboard = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      const myTables = await fetchTables();
-      await fetchOrders(myTables);
+      await fetchTables();
+      await fetchOrders();
     };
     loadData();
-    const interval = setInterval(loadData, 2000);
+    const interval = setInterval(loadData, 3000);
     return () => clearInterval(interval);
   }, [fetchTables, fetchOrders]);
 
-  useEffect(() => {
-    if (!connected) return;
-
-    const newOrderSub = subscribeToTopic('/topic/orders/new', (newOrder) => {
-      setOrders((prev) => {
-        if (prev.find((o) => o.id === newOrder.id)) return prev;
-        return [newOrder, ...prev];
-      });
-    });
-
-    const statusSub = subscribeToTopic('/topic/orders/status', (updatedOrder) => {
-      setOrders((prev) => 
-        prev.map((o) => (o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o))
-      );
-    });
-
-    const kitchenSub = subscribeToTopic('/topic/kitchen', (updatedOrder) => {
-      setOrders((prev) => 
-        prev.map((o) => (o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o))
-      );
-    });
-
-    return () => {
-      if (newOrderSub) newOrderSub.unsubscribe();
-      if (statusSub) statusSub.unsubscribe();
-      if (kitchenSub) kitchenSub.unsubscribe();
-    };
-  }, [connected, subscribeToTopic]);
-
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
-      const storedMock = localStorage.getItem('mockOrders');
-      if (storedMock) {
-        const allOrders = JSON.parse(storedMock);
-        const updatedMock = allOrders.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
-        localStorage.setItem('mockOrders', JSON.stringify(updatedMock));
-      }
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
-      await api.patch(`/api/v1/orders/${orderId}/status`, { status: newStatus });
+      await api.patch(`/orders/${orderId}/status`, { status: newStatus });
+      await fetchOrders();
     } catch (err) {
       console.error('Failed to update order status', err);
     }
   };
 
-  const handleReadyForBilling = async (tableNumber) => {
-    try {
-      // Mock optimistic table status update
-      setAssignedTables(prev => prev.map(t => t.number === tableNumber ? { ...t, status: 'Waiting for Payment' } : t));
-      
-      // Notify Cashier
-      await api.post('/api/v1/bills/request', { tableNumber });
-      alert(`Billing request sent to cashier for Table ${tableNumber}`);
-    } catch (err) {
-      console.error('Failed to send billing request', err);
-      alert(`Mock: Billing request sent to cashier for Table ${tableNumber}`);
-    }
-  };
+  const readyOrders = orders.filter(o => o.status === 'READY');
+  const activeOrders = orders.filter(o => ['PENDING', 'CONFIRMED', 'PREPARING'].includes(o.status));
+  const occupiedTables = assignedTables.filter(t => t.status === 'Customer Dining');
 
-  const pendingOrders = orders.filter((o) => o.status === 'PENDING');
-  const preparingOrders = orders.filter((o) => o.status === 'PREPARING' || o.status === 'ACCEPTED');
-  const readyOrders = orders.filter((o) => o.status === 'READY');
-  const completedOrders = orders.filter((o) => o.status === 'DELIVERED');
-
-  // Any table that has a delivered order is considered "Active Dining"
-  const activeDiningTables = assignedTables.filter(t => 
-    completedOrders.some(o => o.tableNumber === t.number) || t.status === 'Occupied'
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+        <p className="text-gray-500">Loading dashboard...</p>
+      </div>
+    </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col">
-      <header className="mb-6 flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+    <div className="min-h-screen bg-gray-50 p-6">
+      <header className="mb-6 bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Waiter Portal</h1>
-          <p className="text-sm text-gray-500 font-medium">Real-time Order Management</p>
+          <h1 className="text-2xl font-black text-gray-900">Waiter Dashboard</h1>
+          <p className="text-sm text-gray-500">Welcome, {empId || 'Waiter'} — Live orders &amp; table status</p>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-            <span className={connected ? 'text-green-700' : 'text-red-700'}>
-              {connected ? 'Live Sync Active' : 'Disconnected'}
-            </span>
-          </div>
-          <button onClick={fetchOrders} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
+        <button onClick={() => { fetchTables(); fetchOrders(); }}
+          className="flex items-center gap-2 text-sm bg-blue-50 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors">
+          <RefreshCw size={16} /> Refresh
+        </button>
       </header>
 
-      {/* Dashboard Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Assigned Tables</p>
-            <p className="text-2xl font-bold text-gray-900">{assignedTables.length}</p>
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+            <BellRing className="text-orange-500" size={24} />
           </div>
-          <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><Utensils size={20}/></div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-500 font-medium">Pending Orders</p>
-            <p className="text-2xl font-bold text-gray-900">{pendingOrders.length}</p>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-yellow-50 flex items-center justify-center text-yellow-600"><Clock size={20}/></div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Preparing Orders</p>
-            <p className="text-2xl font-bold text-gray-900">{preparingOrders.length}</p>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center text-purple-600"><ChefHat size={20}/></div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Ready for Delivery</p>
             <p className="text-2xl font-bold text-gray-900">{readyOrders.length}</p>
+            <p className="text-sm text-gray-500">Ready to Serve</p>
           </div>
-          <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600"><BellRing size={20}/></div>
         </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Completed Orders</p>
-            <p className="text-2xl font-bold text-gray-900">{completedOrders.length}</p>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+            <Clock className="text-blue-500" size={24} />
           </div>
-          <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-600"><CheckCircle size={20}/></div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{activeOrders.length}</p>
+            <p className="text-sm text-gray-500">Orders in Kitchen</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-4">
+          <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+            <Utensils className="text-green-500" size={24} />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{occupiedTables.length}</p>
+            <p className="text-sm text-gray-500">Occupied Tables</p>
+          </div>
         </div>
       </div>
-      {/* End Dashboard Cards */}
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
-      `}</style>
+
+      {/* Ready to Serve — urgent */}
+      {readyOrders.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <BellRing className="text-orange-500" size={20} /> Ready to Serve
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {readyOrders.map(order => (
+              <div key={order.id} className="bg-orange-50 border-2 border-orange-300 rounded-xl p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <span className="font-bold text-orange-700">Table {order.tableNumber}</span>
+                    <span className="ml-2 px-2 py-0.5 bg-orange-200 text-orange-700 text-xs rounded-full font-semibold">READY</span>
+                  </div>
+                  <span className="text-xs text-gray-500">{order.time}</span>
+                </div>
+                <ul className="text-sm text-gray-700 mb-3 space-y-1">
+                  {order.items.map((item, i) => (
+                    <li key={i}>• {item.name} × {item.quantity}</li>
+                  ))}
+                </ul>
+                <button onClick={() => updateOrderStatus(order.id, 'SERVED')}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-2">
+                  <CheckCircle size={16} /> Mark as Served
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active Orders */}
+      <div>
+        <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+          <ChefHat className="text-blue-500" size={20} /> Orders in Kitchen
+        </h2>
+        {activeOrders.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
+            <Coffee size={40} className="text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500">No active orders right now</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeOrders.map(order => (
+              <div key={order.id} className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <span className="font-bold text-gray-800">Table {order.tableNumber}</span>
+                    <span className={`ml-2 px-2 py-0.5 text-xs rounded-full font-semibold ${
+                      order.status === 'PREPARING' ? 'bg-yellow-100 text-yellow-700'
+                      : order.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-700'
+                      : 'bg-gray-100 text-gray-600'
+                    }`}>{order.status}</span>
+                  </div>
+                  <span className="text-xs text-gray-500">{order.time}</span>
+                </div>
+                <ul className="text-sm text-gray-600 space-y-1">
+                  {order.items.map((item, i) => (
+                    <li key={i}>• {item.name} × {item.quantity}</li>
+                  ))}
+                </ul>
+                {order.remarks && <p className="text-xs text-gray-400 mt-2 italic">Note: {order.remarks}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

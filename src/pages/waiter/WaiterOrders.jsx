@@ -1,31 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useWebSocket } from '../../contexts/WebSocketContext';
 import api from '../../api';
-import { BellRing, ChefHat, Package, RefreshCw } from 'lucide-react';
+import { BellRing, ChefHat, CheckCircle, Clock, Coffee } from 'lucide-react';
 
 const WaiterOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { subscribeToTopic, connected } = useWebSocket();
 
-  const fetchTables = useCallback(async () => {
-    try {
-      const stored = localStorage.getItem('mockTables');
-      const username = localStorage.getItem('username');
-      const userRole = localStorage.getItem('role');
-      let myTables = [];
-      if (stored) {
-        const allTables = JSON.parse(stored);
-        myTables = allTables;
-      }
-      return myTables;
-    } catch (err) {
-      console.error('Failed to fetch tables', err);
-      return [];
-    }
-  }, []);
-
-  const fetchOrders = useCallback(async (myTables) => {
+  const fetchOrders = useCallback(async () => {
     try {
       const activeRes = await api.get('/orders/active');
       const mapped = (activeRes || []).map(bo => ({
@@ -35,168 +16,156 @@ const WaiterOrders = () => {
         remarks: bo.remarks,
         items: (bo.items || []).map(bi => ({
           name: bi.itemName,
-          quantity: bi.quantity
+          quantity: bi.quantity,
+          price: bi.price
         })),
-        total: bo.totalAmount,
+        total: bo.totalAmount || 0,
         time: bo.placedAt ? new Date(bo.placedAt).toLocaleTimeString() : new Date().toLocaleTimeString()
       }));
-      
-      const myTableNumbers = myTables.map(t => String(t.number));
-      setOrders(mapped.filter(o => myTableNumbers.includes(String(o.tableNumber))));
+      setOrders(mapped);
     } catch (err) {
       console.error('Failed to fetch orders from API:', err);
-      const storedMock = localStorage.getItem('mockOrders');
-      let allOrders = storedMock ? JSON.parse(storedMock) : [];
-      const myTableNumbers = myTables.map(t => String(t.number));
-      setOrders(allOrders.filter(o => myTableNumbers.includes(String(o.tableNumber))));
+      setOrders([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const loadData = async () => {
-      const myTables = await fetchTables();
-      await fetchOrders(myTables);
-    };
-    loadData();
-    const interval = setInterval(loadData, 2000);
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 3000);
     return () => clearInterval(interval);
-  }, [fetchTables, fetchOrders]);
-
-  useEffect(() => {
-    if (!connected) return;
-
-    const newOrderSub = subscribeToTopic('/topic/orders/new', (newOrder) => {
-      setOrders((prev) => prev.find((o) => o.id === newOrder.id) ? prev : [newOrder, ...prev]);
-    });
-
-    const statusSub = subscribeToTopic('/topic/orders/status', (updatedOrder) => {
-      setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o)));
-    });
-
-    const kitchenSub = subscribeToTopic('/topic/kitchen', (updatedOrder) => {
-      setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o)));
-    });
-
-    return () => {
-      if (newOrderSub) newOrderSub.unsubscribe();
-      if (statusSub) statusSub.unsubscribe();
-      if (kitchenSub) kitchenSub.unsubscribe();
-    };
-  }, [connected, subscribeToTopic]);
+  }, [fetchOrders]);
 
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
       await api.patch(`/orders/${orderId}/status`, { status: newStatus });
-      const myTables = await fetchTables();
-      await fetchOrders(myTables);
+      await fetchOrders();
     } catch (err) {
       console.error('Failed to update order status:', err);
-      // Fallback
-      const storedMock = localStorage.getItem('mockOrders');
-      if (storedMock) {
-        const allOrders = JSON.parse(storedMock);
-        const updatedMock = allOrders.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
-        localStorage.setItem('mockOrders', JSON.stringify(updatedMock));
-      }
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o)));
+      // Optimistic update
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     }
   };
 
-  const preparingOrders = orders.filter((o) => o.status === 'PREPARING' || o.status === 'ACCEPTED');
-  const readyOrders = orders.filter((o) => o.status === 'READY');
+  const statusColor = (status) => {
+    switch(status) {
+      case 'PENDING': return 'bg-gray-100 text-gray-600';
+      case 'CONFIRMED': return 'bg-blue-100 text-blue-700';
+      case 'PREPARING': return 'bg-yellow-100 text-yellow-700';
+      case 'READY': return 'bg-green-100 text-green-700';
+      case 'SERVED': return 'bg-purple-100 text-purple-700';
+      default: return 'bg-gray-100 text-gray-500';
+    }
+  };
+
+  const readyOrders = orders.filter(o => o.status === 'READY');
+  const activeOrders = orders.filter(o => ['PENDING', 'CONFIRMED', 'PREPARING'].includes(o.status));
+  const servedOrders = orders.filter(o => o.status === 'SERVED');
+
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col">
-      <header className="mb-6 flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Food Delivery</h1>
-          <p className="text-sm text-gray-500 font-medium">Deliver ready food to your tables</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-            <span className={connected ? 'text-green-700' : 'text-red-700'}>{connected ? 'Live' : 'Disconnected'}</span>
-          </div>
-          <button onClick={fetchOrders} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-            <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <header className="mb-6 bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+        <h1 className="text-2xl font-black text-gray-900">Live Orders</h1>
+        <p className="text-sm text-gray-500">{readyOrders.length} ready · {activeOrders.length} in kitchen · {servedOrders.length} served</p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1">
-        
-        {/* Kitchen Status (Preparing) */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col h-[calc(100vh-180px)]">
-          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <ChefHat className="text-purple-500" size={24} /> Kitchen is Preparing
+      {/* Ready to Serve — urgent section */}
+      {readyOrders.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-md font-bold text-orange-700 mb-3 flex items-center gap-2">
+            <BellRing size={18} className="text-orange-500" /> 🔔 Ready to Serve
           </h2>
-          <div className="flex-1 overflow-y-auto space-y-5 pr-2 custom-scrollbar">
-            {preparingOrders.map(order => (
-              <div key={order.id} className="border border-purple-200 bg-purple-50/30 rounded-xl p-5 shadow-sm">
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="text-lg font-black text-gray-900">Order #{order.orderNumber || order.id}</h3>
-                  <span className="bg-purple-100 text-purple-800 text-xs px-3 py-1 rounded-full font-bold shadow-sm">Preparing</span>
-                </div>
-                <p className="text-purple-600 font-medium mb-4">Table {order.tableNumber}</p>
-                
-                <ul className="space-y-2">
-                  {order.items?.map((item, idx) => (
-                    <li key={idx} className="text-gray-800 flex flex-col">
-                      <div><span className="font-bold text-gray-900">{item.quantity}x</span> {item.name}</div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-            {preparingOrders.length === 0 && <p className="text-center text-gray-400 mt-10">Kitchen is idle</p>}
-          </div>
-        </div>
-
-        {/* Ready to Deliver */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col h-[calc(100vh-180px)]">
-          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <BellRing className="text-green-500" size={24} /> Ready for Delivery
-          </h2>
-          <div className="flex-1 overflow-y-auto space-y-5 pr-2 custom-scrollbar">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {readyOrders.map(order => (
-              <div key={order.id} className="border border-green-300 bg-green-50/30 rounded-xl p-5 shadow-sm">
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="text-lg font-black text-gray-900">Order #{order.orderNumber || order.id}</h3>
-                  <span className="bg-green-100 text-green-800 text-xs px-3 py-1 rounded-full font-bold shadow-sm">
-                    Ready
-                  </span>
+              <div key={order.id} className="bg-orange-50 border-2 border-orange-400 rounded-xl p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <span className="font-bold text-orange-800">Table {order.tableNumber}</span>
+                    <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-bold">READY</span>
+                  </div>
+                  <span className="text-xs text-gray-500">{order.time}</span>
                 </div>
-                <p className="text-green-600 font-medium mb-4">Table {order.tableNumber}</p>
-                
-                <ul className="space-y-2 mb-6">
-                  {order.items?.map((item, idx) => (
-                    <li key={idx} className="text-gray-800">
-                      <span className="font-bold text-gray-900">{item.quantity}x</span> {item.name}
-                    </li>
+                <ul className="text-sm text-gray-700 mb-3 space-y-1">
+                  {order.items.map((item, i) => (
+                    <li key={i}>• {item.name} × {item.quantity}</li>
                   ))}
                 </ul>
-
-                <button 
-                  onClick={() => updateOrderStatus(order.id, 'DELIVERED')}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm flex items-center justify-center gap-2"
-                >
-                  <Package size={18}/> Deliver to Customer
+                <div className="flex justify-between items-center text-sm font-bold text-gray-700 mb-3">
+                  <span>Total: ₹{order.total.toFixed(2)}</span>
+                </div>
+                <button onClick={() => updateOrderStatus(order.id, 'SERVED')}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors">
+                  <CheckCircle size={16} /> Mark as Served
                 </button>
               </div>
             ))}
-            {readyOrders.length === 0 && <p className="text-center text-gray-400 mt-10">No food waiting to be delivered</p>}
           </div>
         </div>
+      )}
 
+      {/* In Kitchen */}
+      <div className="mb-6">
+        <h2 className="text-md font-bold text-gray-700 mb-3 flex items-center gap-2">
+          <ChefHat size={18} className="text-blue-500" /> In Kitchen
+        </h2>
+        {activeOrders.length === 0 ? (
+          <div className="bg-white rounded-xl p-6 text-center border border-gray-100 shadow-sm">
+            <Coffee size={32} className="text-gray-300 mx-auto mb-2" />
+            <p className="text-gray-400 text-sm">No orders currently being prepared</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeOrders.map(order => (
+              <div key={order.id} className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <span className="font-bold text-gray-800">Table {order.tableNumber}</span>
+                    <span className={`ml-2 px-2 py-0.5 text-xs rounded-full font-semibold ${statusColor(order.status)}`}>{order.status}</span>
+                  </div>
+                  <span className="text-xs text-gray-400">{order.time}</span>
+                </div>
+                <ul className="text-sm text-gray-600 space-y-1">
+                  {order.items.map((item, i) => (
+                    <li key={i}>• {item.name} × {item.quantity}</li>
+                  ))}
+                </ul>
+                {order.remarks && <p className="text-xs text-gray-400 mt-2 italic">Note: {order.remarks}</p>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
-      `}</style>
+      {/* Served Orders */}
+      {servedOrders.length > 0 && (
+        <div>
+          <h2 className="text-md font-bold text-gray-700 mb-3 flex items-center gap-2">
+            <CheckCircle size={18} className="text-green-500" /> Served
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {servedOrders.map(order => (
+              <div key={order.id} className="bg-green-50 rounded-xl p-4 border border-green-200 shadow-sm opacity-75">
+                <div className="flex justify-between items-start mb-2">
+                  <span className="font-semibold text-green-800">Table {order.tableNumber}</span>
+                  <span className="text-xs text-gray-400">{order.time}</span>
+                </div>
+                <ul className="text-sm text-green-700 space-y-1">
+                  {order.items.map((item, i) => (
+                    <li key={i}>✓ {item.name} × {item.quantity}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
