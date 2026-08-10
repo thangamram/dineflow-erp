@@ -99,9 +99,12 @@ const LoginPage = () => {
         return;
       }
 
-      // Auto-format EMP001 to EMP-0001 to match backend seed data format if needed
-      if (/^EMP\d{3,4}$/i.test(searchUsername)) {
-        searchUsername = searchUsername.replace(/^EMP/i, 'EMP-');
+      // Auto-format EMP001 to EMP-0001 to match backend seed data format
+      const empMatch = searchUsername.match(/^EMP-?(\d+)$/i);
+      if (empMatch) {
+        const numStr = empMatch[1];
+        // Pad the number to 4 digits
+        searchUsername = `EMP-${numStr.padStart(4, '0')}`;
       }
 
       // ── Backend API login ──
