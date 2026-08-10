@@ -68,7 +68,7 @@ export default function OrderTracking() {
             if (['NEW', 'RECEIVED', 'PENDING', 'WAITING'].includes(order.status)) overallStatus = 'PLACED';
             else if (['PREPARING', 'ACCEPTED'].includes(order.status)) overallStatus = 'PREPARING';
             else if (order.status === 'READY') overallStatus = 'READY';
-            else if (['DELIVERED', 'COMPLETED', 'BILLED', 'PAID', 'CLOSED'].includes(order.status)) overallStatus = 'DELIVERED';
+            else if (['DELIVERED', 'SERVED', 'COMPLETED', 'BILLED', 'PAID', 'CLOSED'].includes(order.status)) overallStatus = 'DELIVERED';
             setStatus(overallStatus);
             return;
           }
@@ -87,7 +87,7 @@ export default function OrderTracking() {
           if (statuses.includes('PENDING') || statuses.includes('NEW') || statuses.includes('RECEIVED') || statuses.includes('WAITING')) overallStatus = 'PLACED';
           else if (statuses.includes('PREPARING') || statuses.includes('ACCEPTED')) overallStatus = 'PREPARING';
           else if (statuses.includes('READY')) overallStatus = 'READY';
-          else if (statuses.includes('DELIVERED') || statuses.includes('COMPLETED')) overallStatus = 'DELIVERED';
+          else if (statuses.includes('DELIVERED') || statuses.includes('SERVED') || statuses.includes('COMPLETED')) overallStatus = 'DELIVERED';
           setStatus(overallStatus);
         }
       }
