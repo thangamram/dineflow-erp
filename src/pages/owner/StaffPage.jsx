@@ -129,11 +129,12 @@ export default function StaffPage() {
                 if (formData.role === 'Cashier') backendRole = 'ROLE_CASHIER';
 
                 // Call /auth/register
+                const uniqueMobile = '99' + formData.username.replace('EMP-', '').padStart(8, '0');
                 await api.post('/auth/register', {
                     username: formData.username,
                     fullName: formData.name,
                     email: formData.username.toLowerCase() + '@dineflow.local',
-                    mobileNumber: '0000000000',
+                    mobileNumber: uniqueMobile,
                     password: formData.password || 'password123',
                     role: backendRole,
                     baseSalary: formData.salary || 0
