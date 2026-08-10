@@ -113,6 +113,12 @@ export default function PayrollManagement() {
         let stats = null;
 
         if (employee) {
+            setFormData({
+                ...formData,
+                employeeId: id,
+                basicSalary: baseSalary,
+                deductions: Math.round(autoDeduction)
+            });
             try {
                 const attRes = await api.get(`/employees/${employee.id}/attendance`);
                 const empAttendance = attRes || [];
@@ -132,12 +138,11 @@ export default function PayrollManagement() {
                     leave: leaveCount
                 });
             
-                setFormData({
-                    ...formData,
-                    employeeId: id,
-                    basicSalary: baseSalary,
+                // Update deductions after calculation
+                setFormData(prev => ({
+                    ...prev,
                     deductions: Math.round(autoDeduction)
-                });
+                }));
             } catch (err) {
                 console.error('Failed to load attendance for payroll stats:', err);
                 setAttendanceStats(null);
