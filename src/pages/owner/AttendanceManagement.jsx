@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, UserCheck, Search, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
+import api from '../../api';
 
 const AttendanceManagement = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -12,10 +13,23 @@ const AttendanceManagement = () => {
     loadData();
   }, [selectedDate]);
 
-  const loadData = () => {
-    const storedStaff = JSON.parse(localStorage.getItem('mockStaff') || '[]');
-    // Show employees that are not owners, regardless of strict 'Active' casing (could be missing or lowercase)
-    setStaff(storedStaff.filter(s => s.role !== 'Owner' && (s.status === 'Active' || s.status === 'active' || !s.status)));
+  const loadData = async () => {
+    try {
+        const usersRes = await api.get('/api/users/all');
+        const staffList = usersRes.data
+            .filter(u => u.roles && !u.roles.includes('ROLE_ADMIN') && u.enabled)
+            .map(u => ({
+                employeeId: u.username,
+                name: u.fullName || u.username,
+                role: u.roles.includes('ROLE_WAITER') ? 'Waiter' : 
+                      u.roles.includes('ROLE_KITCHEN') ? 'Kitchen' : 'Staff',
+                status: 'Active'
+            }));
+        setStaff(staffList);
+    } catch (err) {
+        console.error('Failed to load staff from API:', err);
+        setStaff([]);
+    }
     
     const storedAttendance = JSON.parse(localStorage.getItem('mockAttendance') || '[]');
     setAttendance(storedAttendance.filter(a => a.date === selectedDate));

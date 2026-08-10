@@ -30,11 +30,17 @@ export default function TablesPage() {
             console.error('Failed to load tables from API:', err);
         }
 
-        const storedStaff = localStorage.getItem('mockStaff');
-        if (storedStaff) {
-            const staff = JSON.parse(storedStaff);
-            setWaiters(staff.filter(s => s.role === 'Waiter' && s.status === 'Active'));
-        } else {
+        try {
+            const usersRes = await api.get('/api/users/all');
+            const waitersList = usersRes.data
+                .filter(u => u.roles && u.roles.includes('ROLE_WAITER') && u.enabled)
+                .map(u => ({
+                    username: u.username,
+                    name: u.fullName || u.username
+                }));
+            setWaiters(waitersList);
+        } catch (err) {
+            console.error('Failed to load waiters from API:', err);
             setWaiters([]);
         }
     };
