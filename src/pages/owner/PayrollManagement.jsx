@@ -134,7 +134,7 @@ export default function PayrollManagement() {
             
                 setFormData({
                     ...formData,
-                    employeeId: employeeId,
+                    employeeId: id,
                     basicSalary: baseSalary,
                     deductions: Math.round(autoDeduction)
                 });
