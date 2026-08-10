@@ -224,7 +224,12 @@ export default function CustomerPortal() {
       }));
       setMyOrders(mapped);
     } catch (e) {
-      console.error('Failed to fetch dashboard data:', e);
+      console.error(e);
+      const storedOrders = localStorage.getItem('mockOrders');
+      if (storedOrders) {
+        const allOrders = JSON.parse(storedOrders);
+        setMyOrders(allOrders.filter(o => o.tableNumber === String(tableNumber)));
+      }
     }
     
     try {
@@ -393,6 +398,21 @@ export default function CustomerPortal() {
       if (table) {
         await api.patch(`/tables/${table.id}/status?status=OCCUPIED`).catch(() => {});
       }
+
+      // Add to local mock orders for fallback backward compatibility
+      const newOrder = {
+        id: res?.id?.toString() || `ORD-${Math.floor(Math.random() * 9000) + 1000}`,
+        tableNumber: String(tableNumber),
+        sessionId: sessionId,
+        status: 'PENDING',
+        items: Object.values(cart).map(c => ({ id: c.id, name: c.name, quantity: c.quantity, price: c.price })),
+        specialNote,
+        total: grandTotal,
+        time: new Date().toLocaleTimeString()
+      };
+      const storedOrders = localStorage.getItem('mockOrders');
+      const allOrders = storedOrders ? JSON.parse(storedOrders) : [];
+      localStorage.setItem('mockOrders', JSON.stringify([newOrder, ...allOrders]));
 
       setCart({});
       setShowCartModal(false);
