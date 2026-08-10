@@ -89,43 +89,25 @@ const LoginPage = () => {
     setError('');
     
     try {
-      const searchUsername = username.trim();
+      let searchUsername = username.trim();
       const searchPassword = password.trim();
 
-      // ── Step 1: Check if the entered username matches an Employee ID in mockStaff ──
-      const storedStaff = localStorage.getItem('mockStaff');
-      if (storedStaff) {
-        const staffList = JSON.parse(storedStaff);
-        // Match by employeeId OR username field (case-insensitive)
-        const matched = staffList.find(s =>
-          s.employeeId?.toLowerCase() === searchUsername.toLowerCase() ||
-          s.username?.toLowerCase() === searchUsername.toLowerCase()
-        );
-        if (matched) {
-          if (matched.password !== searchPassword) {
-            setError('Invalid Employee ID or password. Please try again.');
-            setLoading(false);
-            return;
-          }
-          // Successful local staff login
-          await handleLoginSuccess(matched);
-          setLoading(false);
-          return;
-        }
+      // Enforce Employee ID usage and prevent email addresses
+      if (searchUsername.includes('@')) {
+        setError('Please use your Employee ID instead of an email address.');
+        setLoading(false);
+        return;
       }
 
-      // ── Step 2: Owner login shortcut ──
-      let finalUsername = searchUsername;
-      let finalPassword = searchPassword;
-      if (searchUsername.toLowerCase() === 'owner' && searchPassword === 'Admin@123') {
-        finalUsername = 'admin';
-        finalPassword = 'password123';
+      // Auto-format EMP001 to EMP-0001 to match backend seed data format if needed
+      if (/^EMP\d{3,4}$/i.test(searchUsername)) {
+        searchUsername = searchUsername.replace(/^EMP/i, 'EMP-');
       }
 
-      // ── Step 3: Backend API login (for owner and backend users) ──
+      // ── Backend API login ──
       const data = await api.post('/auth/login', {
-        usernameOrEmailOrMobile: finalUsername,
-        password: finalPassword
+        usernameOrEmailOrMobile: searchUsername,
+        password: searchPassword
       });
 
       const role = data.roles[0];
@@ -191,13 +173,13 @@ const LoginPage = () => {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username / Emp ID</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username / Employee ID</label>
           <div className="relative">
-            <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <UserCheck size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter your Employee ID"
+              placeholder="Enter your Username or EmpID"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
