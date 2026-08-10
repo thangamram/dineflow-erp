@@ -44,7 +44,7 @@ export default function PayrollManagement() {
             const usersArray = Array.isArray(users) ? users : [];
             
             const mappedStaff = usersArray
-                .filter(user => !user.roles || !user.roles.includes('ROLE_CUSTOMER'))
+                .filter(user => !user.roles || (!user.roles.includes('ROLE_CUSTOMER') && !user.roles.includes('ROLE_ADMIN')))
                 .map(user => {
                     let roleName = 'Owner';
                     if (user.roles && user.roles.length > 0) {
