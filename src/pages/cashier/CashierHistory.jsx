@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, CreditCard, Calendar } from 'lucide-react';
+import api from '../../api';
 
 const CashierHistory = () => {
   const [paidBills, setPaidBills] = useState([]);
@@ -7,12 +8,31 @@ const CashierHistory = () => {
   const [filterMethod, setFilterMethod] = useState('All');
 
   useEffect(() => {
-    const stored = localStorage.getItem('cashierPaid');
-    if (stored) {
-      setPaidBills(JSON.parse(stored));
-    } else {
-      setPaidBills([]);
-    }
+    const fetchPaidBills = async () => {
+      try {
+        const response = await api.get('/bills?size=100');
+        const bills = response.content || response.data?.content || response;
+        if (Array.isArray(bills)) {
+          const paid = bills.filter(b => b.status === 'PAID').map(b => ({
+            id: b.id,
+            billNumber: `BILL-${b.id}`,
+            table: `Table ${b.tableNumber || b.tableId}`,
+            orderId: b.orderId ? `ORD-${b.orderId}` : 'N/A',
+            sessionId: b.orderId,
+            total: b.grandTotal || 0,
+            paymentMethod: b.paymentMethod || 'CASH',
+            paidAt: b.paidAt || b.generatedAt
+          }));
+          setPaidBills(paid);
+        } else {
+          setPaidBills([]);
+        }
+      } catch (err) {
+        console.error('Failed to load payment history:', err);
+        setPaidBills([]);
+      }
+    };
+    fetchPaidBills();
   }, []);
 
   const filteredBills = paidBills.filter(bill => {
@@ -79,9 +99,13 @@ const CashierHistory = () => {
             ) : (
               filteredBills.map(bill => (
                 <tr key={bill.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 text-sm font-bold text-gray-900">{bill.orderId || `#${bill.id}`}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-700">{bill.table}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">#{bill.sessionId || 'N/A'}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-gray-900">{bill.billNumber}</td>
+                  <td className="px-6 py-4">
+                    <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-xs font-bold">
+                      {bill.table}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">{bill.orderId}</td>
                   <td className="px-6 py-4 text-sm font-bold text-gray-900">₹{bill.total?.toLocaleString()}</td>
                   <td className="px-6 py-4">
                     <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg text-xs font-semibold text-gray-600">
@@ -90,11 +114,15 @@ const CashierHistory = () => {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     <span className="inline-flex items-center gap-1">
-                      <Calendar size={12} /> {bill.paidAt ? new Date(bill.paidAt).toLocaleTimeString() : 'N/A'}
+                      <Calendar size={12} /> 
+                      {bill.paidAt ? new Date(bill.paidAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full font-bold">Paid</span>
+                    <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-bold">
+                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5"></span>
+                      Success
+                    </span>
                   </td>
                 </tr>
               ))

@@ -18,29 +18,27 @@ export default function OrderTracking() {
   useEffect(() => {
     const checkPayment = async () => {
       try {
-        const dbTables = await api.get('/tables');
-        const myTable = dbTables.find(t => String(t.tableNumber || t.id) === String(tableNumber));
-        if (myTable && myTable.status === 'AVAILABLE') {
-          // Find if there is any settled bill for this table
-          const bills = await api.get('/bills').catch(() => []);
-          const settled = (Array.isArray(bills) ? bills : (bills?.content || [])).find(b => 
-            String(b.tableId) === String(myTable.id) || String(b.tableNumber) === String(tableNumber)
-          );
-          if (settled) {
-            setPaidBill({
-              id: settled.id || 'BILL-101',
-              total: settled.totalAmount || 0,
-              paidAt: settled.paidAt || new Date().toISOString(),
-              paymentMethod: settled.paymentMethod || 'CASH'
-            });
-          } else {
-            setPaidBill({
-              id: 'BILL-' + (myTable.id || 101),
-              total: 0,
-              paidAt: new Date().toISOString(),
-              paymentMethod: 'CASH'
-            });
-          }
+        const orderId = localStorage.getItem('lastPlacedOrderId');
+        if (!orderId) return;
+
+        const billsResponse = await api.get('/bills?size=100').catch(() => null);
+        if (!billsResponse) return;
+        
+        const bills = billsResponse.content || billsResponse.data?.content || billsResponse;
+        const settledList = Array.isArray(bills) ? bills : [];
+        
+        const settled = settledList.find(b => 
+          String(b.orderId) === String(orderId) && b.status === 'PAID'
+        );
+
+        if (settled) {
+          setPaidBill({
+            id: `BILL-${settled.id}`,
+            total: settled.grandTotal || 0,
+            paidAt: settled.paidAt || settled.generatedAt || new Date().toISOString(),
+            paymentMethod: settled.paymentMethod || 'CASH',
+            items: [] // In a real app we'd fetch bill items or order items
+          });
         }
       } catch (err) {
         console.error(err);
