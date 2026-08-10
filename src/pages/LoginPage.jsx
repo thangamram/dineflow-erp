@@ -105,6 +105,10 @@ const LoginPage = () => {
         const numStr = empMatch[1];
         // Pad the number to 4 digits
         searchUsername = `EMP-${numStr.padStart(4, '0')}`;
+      } else if (searchUsername.toLowerCase() !== 'admin') {
+        setError('Please login using your valid Employee ID (e.g., EMP-0001).');
+        setLoading(false);
+        return;
       }
 
       // ── Backend API login ──
@@ -176,13 +180,13 @@ const LoginPage = () => {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username / Employee ID</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Employee ID (EmpID)</label>
           <div className="relative">
             <UserCheck size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter your Username or EmpID"
+              placeholder="Enter your EmpID (e.g. EMP-0001)"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required

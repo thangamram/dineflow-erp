@@ -14,75 +14,58 @@ const AttendanceManagement = () => {
   }, [selectedDate]);
 
   const loadData = async () => {
-        try {
-            const usersRes = await api.get('/users');
-            const usersData = usersRes.content || usersRes.data?.content || usersRes;
-            
-            const usersArray = Array.isArray(usersData) ? usersData : [];
-            const staffList = usersArray
-                .filter(u => u.roles && !u.roles.includes('ROLE_ADMIN') && !u.roles.includes('ROLE_CUSTOMER') && u.enabled)
-            .map(u => ({
-                employeeId: u.username,
-                name: u.fullName || u.username,
-                role: u.roles.includes('ROLE_WAITER') ? 'Waiter' : 
-                      u.roles.includes('ROLE_KITCHEN') ? 'Kitchen' : 'Staff',
-                status: 'Active'
-            }));
-        setStaff(staffList);
+    try {
+      const activeRes = await api.get('/employees/active');
+      const staffList = (activeRes || []).map(u => ({
+        id: u.id,
+        employeeId: u.username,
+        name: u.fullName || u.username,
+        role: u.designation === 'ROLE_WAITER' ? 'Waiter' : 
+              u.designation === 'ROLE_KITCHEN' ? 'Kitchen' : 'Staff',
+        status: 'Active'
+      }));
+      setStaff(staffList);
+      
+      const attendanceRes = await api.get(`/employees/attendance/date/${selectedDate}`);
+      const attendanceData = attendanceRes || [];
+      const mappedAttendance = attendanceData.map(a => ({
+        id: a.id,
+        date: a.attendanceDate,
+        employeeId: a.employeeName, // Temporary map if needed, but we should match by employeeId
+        realEmployeeId: a.employeeId,
+        name: a.employeeName,
+        status: a.status === 'PRESENT' ? 'Present' : a.status === 'ABSENT' ? 'Absent' : a.status === 'HALF_DAY' ? 'Half Day' : 'On Leave',
+      }));
+      setAttendance(mappedAttendance);
     } catch (err) {
-        console.error('Failed to load staff from API:', err);
-        setStaff([]);
+      console.error('Failed to load data:', err);
+      setStaff([]);
+      setAttendance([]);
     }
-    
-    const storedAttendance = JSON.parse(localStorage.getItem('mockAttendance') || '[]');
-    setAttendance(storedAttendance.filter(a => a.date === selectedDate));
   };
 
-  const getAttendanceForEmployee = (employeeId) => {
-    return attendance.find(a => a.employeeId === employeeId) || null;
+  const getAttendanceForEmployee = (realEmployeeId) => {
+    return attendance.find(a => a.realEmployeeId === realEmployeeId) || null;
   };
 
-  const handleMarkAttendance = (employee, status, remarks) => {
-    const existing = getAttendanceForEmployee(employee.employeeId);
-    let newAttendance = [...attendance];
-    
-    const record = {
-      id: existing ? existing.id : `ATT-${Date.now()}`,
-      date: selectedDate,
-      employeeId: employee.employeeId,
-      name: employee.name,
-      role: employee.role,
-      status,
-      remarks,
-      markedBy: 'Owner',
-      markedAt: new Date().toISOString()
-    };
+  const handleMarkAttendance = async (employee, status, remarks) => {
+    let backendStatus = 'PRESENT';
+    if (status === 'Absent') backendStatus = 'ABSENT';
+    if (status === 'Half Day') backendStatus = 'HALF_DAY';
+    if (status === 'On Leave') backendStatus = 'ON_LEAVE';
 
-    if (existing) {
-      newAttendance = newAttendance.map(a => a.id === existing.id ? record : a);
-    } else {
-      newAttendance.push(record);
+    try {
+      await api.post('/employees/attendance', {
+        employeeId: employee.id,
+        attendanceDate: selectedDate,
+        status: backendStatus,
+        checkInTime: status === 'Present' ? new Date().toISOString() : null
+      });
+      loadData();
+    } catch (err) {
+      console.error('Failed to mark attendance:', err);
+      alert('Failed to mark attendance.');
     }
-    
-    setAttendance(newAttendance);
-
-    // Save to global storage
-    const allStored = JSON.parse(localStorage.getItem('mockAttendance') || '[]');
-    const updatedGlobal = allStored.filter(a => !(a.date === selectedDate && a.employeeId === employee.employeeId));
-    updatedGlobal.push(record);
-    localStorage.setItem('mockAttendance', JSON.stringify(updatedGlobal));
-
-    // Audit Log
-    const auditLogs = JSON.parse(localStorage.getItem('mockAuditLogs') || '[]');
-    auditLogs.unshift({
-      id: Date.now(),
-      timestamp: new Date().toISOString(),
-      action: 'Attendance Marked',
-      user: 'Owner',
-      role: 'Owner',
-      details: `Marked ${status} for ${employee.name} (${employee.employeeId}) on ${selectedDate}`
-    });
-    localStorage.setItem('mockAuditLogs', JSON.stringify(auditLogs));
   };
 
   const filteredStaff = staff.filter(s => 
@@ -160,7 +143,7 @@ const AttendanceManagement = () => {
               {filteredStaff.length === 0 ? (
                 <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-500">No active employees found</td></tr>
               ) : filteredStaff.map(emp => {
-                const record = getAttendanceForEmployee(emp.employeeId);
+                const record = getAttendanceForEmployee(emp.id);
                 const currentStatus = record ? record.status : '';
                 return (
                   <tr key={emp.employeeId} className={`hover:bg-gray-50 transition-colors ${!record ? 'bg-orange-50/30' : ''}`}>

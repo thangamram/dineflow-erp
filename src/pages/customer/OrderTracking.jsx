@@ -178,7 +178,7 @@ export default function OrderTracking() {
           <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="text-green-600 w-10 h-10" />
           </div>
-          <h2 className="text-3xl font-black text-gray-900 mb-2">Payment Successful!</h2>
+          <h2 className="text-3xl font-black text-gray-900 mb-2">Transaction Completed Successfully</h2>
           <p className="text-gray-500 font-medium mb-8">Thank you for dining with us at Table {tableNumber}</p>
           
           <div className="bg-blue-50 rounded-2xl p-6 mb-8 text-left border border-blue-100">

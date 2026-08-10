@@ -13,18 +13,15 @@ const WaiterDashboard = () => {
   const fetchTables = useCallback(async () => {
     try {
       const allTables = await api.get('/tables');
-      const deletedIds = (JSON.parse(localStorage.getItem('deletedTableIds') || '[]')).map(String);
-      const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
 
       const myTables = (allTables || [])
-        .filter(t => !deletedIds.includes(String(t.id)))
         .map(t => ({
           id: t.id,
           number: t.tableNumber || String(t.id),
           capacity: t.capacity || 4,
           status: t.status === 'AVAILABLE' ? 'Available'
                 : t.status === 'OCCUPIED' ? 'Customer Dining' : 'Needs Cleaning',
-          assignedWaiter: assignments[t.id] || t.assignedWaiter || ''
+          assignedWaiter: t.assignedWaiter || ''
         }))
         .filter(t => !empId || t.assignedWaiter === empId || t.assignedWaiter === '');
 

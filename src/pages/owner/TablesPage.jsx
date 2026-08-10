@@ -61,14 +61,25 @@ export default function TablesPage() {
         if (!newTable.number.trim()) return;
         
         try {
-            const payload = {
-                tableNumber: newTable.number,
-                capacity: Number(newTable.capacity),
-                status: 'AVAILABLE',
-                qrToken: String(Date.now())
-            };
-            await api.post('/tables', payload);
+            if (editingTable) {
+                await api.put(`/tables/${editingTable.id}`, {
+                    tableNumber: newTable.number,
+                    capacity: Number(newTable.capacity),
+                    status: editingTable.status === 'Available' ? 'AVAILABLE' : editingTable.status === 'Customer Dining' ? 'OCCUPIED' : 'CLEANING',
+                    assignedWaiter: newTable.assignedWaiter,
+                    qrToken: editingTable.qrToken
+                });
+            } else {
+                const payload = {
+                    tableNumber: newTable.number,
+                    capacity: Number(newTable.capacity),
+                    status: 'AVAILABLE',
+                    qrToken: String(Date.now())
+                };
+                await api.post('/tables', payload);
+            }
             setShowAddModal(false);
+            setEditingTable(null);
             setNewTable({ number: '', capacity: 4, assignedWaiter: '' });
             loadData();
         } catch (err) {
@@ -257,7 +268,11 @@ export default function TablesPage() {
                         Download PDF
                     </button>
                     <button 
-                        onClick={() => setShowAddModal(true)}
+                        onClick={() => {
+                            setNewTable({ number: '', capacity: 4, assignedWaiter: '' });
+                            setEditingTable(null);
+                            setShowAddModal(true);
+                        }}
                         className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition-colors font-bold shadow-sm"
                     >
                         <Plus size={20} />
@@ -327,11 +342,18 @@ export default function TablesPage() {
                             <button onClick={() => setShowQrModal(table.number)} className="p-1.5 bg-white/50 hover:bg-white rounded text-gray-800 transition-colors" title="Generate QR Code">
                                 <QrCode size={16} />
                             </button>
-                            {(table.status === 'Paid / Needs Cleaning' || table.status === 'Cleaning' || table.status === 'Completed') && (
+                            {(table.status === 'Paid / Needs Cleaning' || table.status === 'Cleaning' || table.status === 'Completed' || table.status === 'Needs Cleaning') && (
                                 <button onClick={() => handleMarkAvailable(table.id)} className="p-1.5 bg-white/50 hover:bg-white rounded text-gray-800 transition-colors" title="Mark Available">
                                     <CheckCircle size={16} />
                                 </button>
                             )}
+                            <button onClick={() => {
+                                setEditingTable(table);
+                                setNewTable({ number: table.number, capacity: table.capacity, assignedWaiter: table.assignedWaiter });
+                                setShowAddModal(true);
+                            }} className="p-1.5 bg-white/50 hover:bg-white rounded text-blue-600 transition-colors" title="Edit Table">
+                                <Edit2 size={16} />
+                            </button>
                             <button onClick={() => handleDelete(table.id)} className="p-1.5 bg-white/50 hover:bg-white rounded text-red-600 transition-colors" title="Delete Table">
                                 <Trash2 size={16} />
                             </button>
@@ -345,8 +367,11 @@ export default function TablesPage() {
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h2 className="text-xl font-bold text-gray-900">Add New Table</h2>
-                            <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">
+                            <h2 className="text-xl font-bold text-gray-900">{editingTable ? 'Edit Table' : 'Add New Table'}</h2>
+                            <button onClick={() => {
+                                setShowAddModal(false);
+                                setEditingTable(null);
+                            }} className="text-gray-400 hover:text-gray-600">
                                 <X size={24} />
                             </button>
                         </div>
@@ -393,7 +418,7 @@ export default function TablesPage() {
                                     Cancel
                                 </button>
                                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-200">
-                                    Create Table
+                                    {editingTable ? 'Save Changes' : 'Create Table'}
                                 </button>
                             </div>
                         </form>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import EmployeePayroll from '../../components/EmployeePayroll';
+import api from '../../api';
 
 const WaiterPayroll = () => {
   const [employee, setEmployee] = useState(null);
@@ -7,24 +8,51 @@ const WaiterPayroll = () => {
   const [notRegistered, setNotRegistered] = useState(false);
 
   useEffect(() => {
-    const loadData = () => {
-      const username = localStorage.getItem('username');
-      const staff = JSON.parse(localStorage.getItem('mockStaff') || '[]');
-      const user = staff.find(s => s.username === username);
-      
-      if (user) {
-        setEmployee(user);
-        setNotRegistered(false);
-        const allPayrolls = JSON.parse(localStorage.getItem('mockPayroll') || '[]');
-        const userPayrolls = allPayrolls.filter(p => String(p.employeeId) === String(user.id) && p.status !== 'Draft');
-        setPayrolls(userPayrolls.sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt)));
-      } else {
-        setNotRegistered(true);
+    const loadData = async () => {
+      try {
+        const username = localStorage.getItem('username') || localStorage.getItem('employeeId');
+        const activeRes = await api.get('/employees/active');
+        const staffList = activeRes || [];
+        const user = staffList.find(s => s.username === username);
+        
+        if (user) {
+          setEmployee({
+            id: user.id,
+            name: user.fullName || user.username,
+            username: user.username,
+            role: user.designation === 'ROLE_WAITER' ? 'Waiter' : user.designation,
+            joiningDate: user.joiningDate
+          });
+          setNotRegistered(false);
+          
+          const payrollRes = await api.get(`/payrolls/employee/${user.id}`);
+          const userPayrolls = (payrollRes || []).filter(p => p.status === 'PAID');
+          
+          const mappedPayrolls = userPayrolls.map(p => ({
+            id: p.id,
+            period: `${p.month} ${p.year}`,
+            basicSalary: p.basicSalary,
+            allowances: 0,
+            overtimeHours: 0,
+            overtimeRate: 0,
+            overtimePay: p.overtimePay,
+            bonus: p.bonus,
+            deductions: p.deductions,
+            netSalary: p.netPay,
+            status: p.status,
+            generatedAt: p.generatedAt
+          }));
+          
+          setPayrolls(mappedPayrolls.sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt)));
+        } else {
+          setNotRegistered(true);
+        }
+      } catch (err) {
+        console.error('Failed to load payroll:', err);
       }
     };
+    
     loadData();
-    const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   if (notRegistered) return (
@@ -66,9 +94,8 @@ const WaiterPayroll = () => {
 
   const earnings = [
     { label: 'Basic Salary', value: `₹ ${currentPayroll.basicSalary}` },
-    { label: 'Allowances', value: `₹ ${currentPayroll.allowances}` },
-    { label: 'Overtime Pay', value: `₹ ${currentPayroll.overtimeHours * currentPayroll.overtimeRate}` },
-    { label: 'Bonuses', value: `₹ ${currentPayroll.bonus}` }
+    { label: 'Overtime Pay', value: `₹ ${currentPayroll.overtimePay || 0}` },
+    { label: 'Bonuses', value: `₹ ${currentPayroll.bonus || 0}` }
   ];
 
   const deductions = [
@@ -81,7 +108,7 @@ const WaiterPayroll = () => {
     status: p.status
   }));
 
-  const grossSalary = `₹ ${parseFloat(currentPayroll.basicSalary) + parseFloat(currentPayroll.allowances) + (currentPayroll.overtimeHours * currentPayroll.overtimeRate) + parseFloat(currentPayroll.bonus)}`;
+  const grossSalary = `₹ ${parseFloat(currentPayroll.basicSalary) + parseFloat(currentPayroll.overtimePay || 0) + parseFloat(currentPayroll.bonus || 0)}`;
 
   return (
     <EmployeePayroll

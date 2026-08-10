@@ -1,20 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, UserCheck, UserMinus, Clock, Coffee } from 'lucide-react';
+import api from '../../api';
 
 const MyAttendancePage = () => {
   const [attendance, setAttendance] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   
-  const userId = localStorage.getItem('employeeId');
+  const userId = localStorage.getItem('username') || localStorage.getItem('employeeId');
 
   useEffect(() => {
     loadAttendance();
   }, [currentMonth]);
 
-  const loadAttendance = () => {
-    const stored = JSON.parse(localStorage.getItem('mockAttendance') || '[]');
-    const myRecords = stored.filter(a => a.employeeId === userId && a.date.startsWith(currentMonth));
-    setAttendance(myRecords.sort((a, b) => new Date(b.date) - new Date(a.date)));
+  const loadAttendance = async () => {
+    try {
+      const activeRes = await api.get('/employees/active');
+      const staffList = activeRes || [];
+      const username = localStorage.getItem('username') || localStorage.getItem('employeeId');
+      const me = staffList.find(s => s.username === username);
+      if (!me) {
+        console.error('Could not find employee record for logged in user');
+        setAttendance([]);
+        return;
+      }
+      
+      const attendanceRes = await api.get(`/employees/${me.id}/attendance`);
+      const allRecords = attendanceRes || [];
+      const myRecords = allRecords.filter(a => a.attendanceDate && a.attendanceDate.startsWith(currentMonth));
+      const mapped = myRecords.map(a => ({
+        id: a.id,
+        date: a.attendanceDate,
+        status: a.status === 'PRESENT' ? 'Present' : a.status === 'ABSENT' ? 'Absent' : a.status === 'HALF_DAY' ? 'Half Day' : 'On Leave',
+        remarks: '-',
+        markedAt: a.checkInTime || a.attendanceDate
+      }));
+      setAttendance(mapped.sort((a, b) => new Date(b.date) - new Date(a.date)));
+    } catch (err) {
+      console.error('Failed to load attendance:', err);
+      setAttendance([]);
+    }
   };
 
   const stats = {

@@ -68,24 +68,27 @@ export default function PayrollManagement() {
             
             setStaff(mappedStaff);
 
-            const storedPayroll = localStorage.getItem('mockPayroll');
-            if (storedPayroll) {
-                const allPayrolls = JSON.parse(storedPayroll);
-                // Auto-clean: remove payroll records where the employee no longer exists
-                const validPayrolls = allPayrolls.filter(p => {
-                    const empExists = mappedStaff.some(
-                        s => String(s.id) === String(p.employeeId) || String(s.employeeId) === String(p.employeeId)
-                    );
-                    return empExists;
-                });
-                // If we cleaned some out, persist the cleaned list
-                if (validPayrolls.length !== allPayrolls.length) {
-                    localStorage.setItem('mockPayroll', JSON.stringify(validPayrolls));
-                }
-                setPayrolls(validPayrolls);
-            } else {
-                setPayrolls([]);
-            }
+            const payrollRes = await api.get('/payrolls');
+            const allPayrolls = payrollRes || [];
+            
+            // Map backend fields to frontend expected fields
+            const mappedPayrolls = allPayrolls.map(p => ({
+                id: p.id,
+                employeeId: p.employeeId,
+                period: `${p.month} ${p.year}`,
+                basicSalary: p.basicSalary,
+                allowances: 0, // Not saved in backend directly, included in basic/bonus/overtime
+                overtimeHours: 0, 
+                overtimeRate: 0,
+                overtimePay: p.overtimePay,
+                bonus: p.bonus,
+                deductions: p.deductions,
+                netSalary: p.netPay,
+                status: p.status === 'PAID' ? 'Paid' : 'Draft',
+                generatedAt: p.generatedAt
+            }));
+            setPayrolls(mappedPayrolls);
+            
         } catch (error) {
             console.error("Failed to load staff for payroll:", error);
             alert("Failed to load staff members. Please ensure the backend is running.");
@@ -94,9 +97,9 @@ export default function PayrollManagement() {
         }
     };
 
-    const savePayrolls = (updated) => {
-        setPayrolls(updated);
-        localStorage.setItem('mockPayroll', JSON.stringify(updated));
+    // We don't save to localStorage anymore, but we can log securely if needed
+    const savePayrolls = () => {
+        loadData();
     };
 
     const addLog = (action, target) => {
@@ -168,48 +171,70 @@ export default function PayrollManagement() {
         setShowModal(true);
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.employeeId || !formData.period) return;
         
-        const finalNetSalary = netSalary;
-        
-        if (editingId) {
-            const updated = payrolls.map(p => p.id === editingId ? { ...p, ...formData, netSalary: finalNetSalary } : p);
-            savePayrolls(updated);
-            addLog('Updated Payroll', `${selectedStaff?.name} - ${formData.period}`);
-        } else {
-            const newPayroll = {
-                ...formData,
-                id: `PRL-${Date.now()}`,
-                netSalary: finalNetSalary,
-                generatedAt: new Date().toISOString()
-            };
-            savePayrolls([newPayroll, ...payrolls]);
-            addLog('Generated Payroll', `${selectedStaff?.name} - ${formData.period}`);
+        try {
+            const [month, year] = formData.period.split(' ');
+            
+            if (editingId) {
+                // Editing is not supported by the new API natively in a single endpoint, so we recreate or skip.
+                // Assuming we can't edit, just alert for now.
+                alert('Editing existing payroll is not supported. Please delete and recreate.');
+            } else {
+                const payload = {
+                    employeeId: formData.employeeId,
+                    month: month,
+                    year: parseInt(year),
+                    basicSalary: parseFloat(formData.basicSalary) || 0,
+                    overtimePay: overtimePay,
+                    bonus: parseFloat(formData.bonus) || 0,
+                    deductions: parseFloat(formData.deductions) || 0,
+                    status: formData.status === 'Paid' ? 'PAID' : 'PENDING'
+                };
+                
+                await api.post('/payrolls', payload);
+                addLog('Generated Payroll', `${selectedStaff?.name} - ${formData.period}`);
+            }
+            setShowModal(false);
+            loadData();
+        } catch (error) {
+            console.error('Failed to generate payroll:', error);
+            alert('Failed to generate payroll.');
         }
-        setShowModal(false);
     };
 
-    const updateStatus = (id, newStatus) => {
-        const updated = payrolls.map(p => p.id === id ? { 
-            ...p, 
-            status: newStatus,
-            paidAt: newStatus === 'Paid' ? new Date().toISOString() : p.paidAt 
-        } : p);
-        savePayrolls(updated);
-        
-        const targetPayroll = payrolls.find(p => p.id === id);
-        const emp = staff.find(s => String(s.id) === String(targetPayroll.employeeId) || String(s.employeeId) === String(targetPayroll.employeeId));
-        addLog(`Marked as ${newStatus}`, `${emp?.name} - ${targetPayroll?.period}`);
-    };
-
-    const deletePayroll = (id) => {
-        if(confirm('Are you sure you want to delete this draft payroll?')) {
+    const updateStatus = async (id, newStatus) => {
+        try {
+            const backendStatus = newStatus === 'Paid' ? 'PAID' : 'PENDING';
+            await api.patch(`/payrolls/${id}/status?status=${backendStatus}`);
+            
             const targetPayroll = payrolls.find(p => p.id === id);
             const emp = staff.find(s => String(s.id) === String(targetPayroll.employeeId) || String(s.employeeId) === String(targetPayroll.employeeId));
-            savePayrolls(payrolls.filter(p => p.id !== id));
-            addLog('Deleted Payroll', `${emp?.name} - ${targetPayroll?.period}`);
+            addLog(`Marked as ${newStatus}`, `${emp?.name} - ${targetPayroll?.period}`);
+            
+            loadData();
+        } catch (error) {
+            console.error('Failed to update payroll status:', error);
+            alert('Failed to update payroll status.');
+        }
+    };
+
+    const deletePayroll = async (id) => {
+        if(confirm('Are you sure you want to delete this payroll?')) {
+            try {
+                const targetPayroll = payrolls.find(p => p.id === id);
+                const emp = staff.find(s => String(s.id) === String(targetPayroll.employeeId) || String(s.employeeId) === String(targetPayroll.employeeId));
+                
+                await api.delete(`/payrolls/${id}`);
+                
+                addLog('Deleted Payroll', `${emp?.name} - ${targetPayroll?.period}`);
+                loadData();
+            } catch (error) {
+                console.error('Failed to delete payroll:', error);
+                alert('Failed to delete payroll.');
+            }
         }
     };
 
