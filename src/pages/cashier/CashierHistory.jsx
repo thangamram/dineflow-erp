@@ -10,19 +10,34 @@ const CashierHistory = () => {
   useEffect(() => {
     const fetchPaidBills = async () => {
       try {
-        const response = await api.get('/bills?size=100');
-        const bills = response.content || response.data?.content || response;
+        const [billsRes, ordersRes] = await Promise.all([
+          api.get('/bills?size=100').catch(() => null),
+          api.get('/orders?size=500').catch(() => null)
+        ]);
+        
+        const bills = billsRes?.content || billsRes?.data?.content || billsRes;
+        const orders = ordersRes?.content || ordersRes?.data?.content || ordersRes || [];
+        
+        const orderMap = {};
+        if (Array.isArray(orders)) {
+          orders.forEach(o => orderMap[o.id] = o);
+        }
+
         if (Array.isArray(bills)) {
-          const paid = bills.filter(b => b.status === 'PAID').map(b => ({
-            id: b.id,
-            billNumber: `BILL-${b.id}`,
-            table: `Table ${b.tableNumber || b.tableId}`,
-            orderId: b.orderId ? `ORD-${b.orderId}` : 'N/A',
-            sessionId: b.orderId,
-            total: b.grandTotal || 0,
-            paymentMethod: b.paymentMethod || 'CASH',
-            paidAt: b.paidAt || b.generatedAt
-          }));
+          const paid = bills.filter(b => b.status === 'PAID').map(b => {
+            const order = orderMap[b.orderId];
+            const tableRef = order ? (order.tableNumber || order.tableId) : (b.tableNumber || b.tableId);
+            return {
+              id: b.id,
+              billNumber: `BILL-${b.id}`,
+              table: `Table ${tableRef || '?'}`,
+              orderId: b.orderId ? `ORD-${b.orderId}` : 'N/A',
+              sessionId: b.orderId,
+              total: b.grandTotal || 0,
+              paymentMethod: b.paymentMethod || 'CASH',
+              paidAt: b.paidAt || b.generatedAt
+            };
+          });
           setPaidBills(paid);
         } else {
           setPaidBills([]);
