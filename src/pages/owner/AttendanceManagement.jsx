@@ -20,7 +20,7 @@ const AttendanceManagement = () => {
             
             const usersArray = Array.isArray(usersData) ? usersData : [];
             const staffList = usersArray
-                .filter(u => u.roles && !u.roles.includes('ROLE_ADMIN') && u.enabled)
+                .filter(u => u.roles && !u.roles.includes('ROLE_ADMIN') && !u.roles.includes('ROLE_CUSTOMER') && u.enabled)
             .map(u => ({
                 employeeId: u.username,
                 name: u.fullName || u.username,
