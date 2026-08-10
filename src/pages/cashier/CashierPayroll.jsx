@@ -26,7 +26,7 @@ const CashierPayroll = () => {
           setNotRegistered(false);
           
           const payrollRes = await api.get(`/payrolls/employee/${user.id}`);
-          const userPayrolls = (payrollRes || []).filter(p => p.status === 'PAID');
+          const userPayrolls = payrollRes || [];
           
           const mappedPayrolls = userPayrolls.map(p => ({
             id: p.id,

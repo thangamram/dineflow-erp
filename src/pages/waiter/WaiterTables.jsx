@@ -68,12 +68,11 @@ const WaiterTables = () => {
       const total = readyOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
       try {
-        await api.post('/bills', {
-          tableId: table.id,
-          tableNumber: table.number,
-          totalAmount: total,
-          status: 'PENDING'
-        });
+        if (readyOrders.length > 0) {
+          await api.post('/bills', {
+            orderId: readyOrders[0].id
+          });
+        }
       } catch (e) {
         console.warn('Bill API not available, storing locally:', e.message);
         // Fallback: write to cashierPending in localStorage
