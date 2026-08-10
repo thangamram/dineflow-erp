@@ -363,45 +363,9 @@ export default function CustomerPortal() {
 
   const handleConfirmOrder = async () => {
     try {
-      // Force fresh token — clear stale/mock token first
-      const currentToken = localStorage.getItem('token');
-      if (!currentToken || currentToken.startsWith('mock-jwt-token')) {
-        localStorage.removeItem('token');
-      }
-      await getAuthToken();
-      
-      // Get table ID
-      const tables = await api.get('/tables');
-      const table = tables.find(t => String(t.tableNumber) === String(tableNumber) || String(t.id) === String(tableNumber));
-      const tableId = table ? table.id : 1;
-
-      // Post order
-      const itemsPayload = Object.values(cart).map(c => ({
-        menuItemId: Number(c.id),
-        quantity: c.quantity,
-        specialInstructions: specialNote
-      }));
-
-      const res = await api.post('/orders', {
-        tableId: tableId,
-        orderType: 'DINE_IN',
-        remarks: specialNote,
-        items: itemsPayload
-      });
-
-      // Save order ID locally so tracking knows what to poll
-      if (res && res.id) {
-        localStorage.setItem('lastPlacedOrderId', res.id.toString());
-      }
-
-      // Update local table status
-      if (table) {
-        await api.patch(`/tables/${table.id}/status?status=OCCUPIED`).catch(() => {});
-      }
-
-      // Add to local mock orders for fallback backward compatibility
+      // 1. Add to local mock orders first for backward compatibility (syncs with Kitchen)
       const newOrder = {
-        id: res?.id?.toString() || `ORD-${Math.floor(Math.random() * 9000) + 1000}`,
+        id: `ORD-${Math.floor(Math.random() * 9000) + 1000}`,
         tableNumber: String(tableNumber),
         sessionId: sessionId,
         status: 'PENDING',
@@ -414,12 +378,48 @@ export default function CustomerPortal() {
       const allOrders = storedOrders ? JSON.parse(storedOrders) : [];
       localStorage.setItem('mockOrders', JSON.stringify([newOrder, ...allOrders]));
 
+      // 2. Try to sync with the real backend (syncs with Waiter)
+      try {
+        const currentToken = localStorage.getItem('token');
+        if (!currentToken || currentToken.startsWith('mock-jwt-token')) {
+          localStorage.removeItem('token');
+        }
+        await getAuthToken();
+
+        const tables = await api.get('/tables').catch(() => []);
+        const table = tables.find(t => String(t.tableNumber) === String(tableNumber) || String(t.id) === String(tableNumber));
+        const tableId = table ? table.id : 1;
+
+        const itemsPayload = Object.values(cart).map(c => ({
+          menuItemId: Number(c.id),
+          quantity: c.quantity,
+          specialInstructions: specialNote
+        }));
+
+        const res = await api.post('/orders', {
+          tableId: tableId,
+          orderType: 'DINE_IN',
+          remarks: specialNote,
+          items: itemsPayload
+        });
+
+        if (res && res.id) {
+          localStorage.setItem('lastPlacedOrderId', res.id.toString());
+        }
+
+        if (table) {
+          await api.patch(`/tables/${table.id}/status?status=OCCUPIED`).catch(() => {});
+        }
+      } catch (err) {
+        console.error("Failed to sync order to backend:", err);
+      }
+
       setCart({});
       setShowCartModal(false);
       navigate('/customer/track');
-    } catch (err) {
-      console.error('Failed to place order:', err);
-      alert('Failed to place order: ' + (err.response?.data?.message || err.message));
+    } catch (error) {
+      console.error('Error confirming order:', error);
+      alert('Failed to place order. Please try again.');
     }
   };
 

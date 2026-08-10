@@ -5,11 +5,13 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import api from '../../api';
 
 export default function PayrollManagement() {
     const [payrolls, setPayrolls] = useState([]);
     const [staff, setStaff] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [loading, setLoading] = useState(true);
     
     // Modal states
     const [showModal, setShowModal] = useState(false);
@@ -33,27 +35,58 @@ export default function PayrollManagement() {
         loadData();
     }, []);
 
-    const loadData = () => {
-        const storedStaff = JSON.parse(localStorage.getItem('mockStaff') || '[]');
-        setStaff(storedStaff);
+    const loadData = async () => {
+        try {
+            const response = await api.get('/api/users/all');
+            const users = response.data;
+            const mappedStaff = users
+                .filter(user => !user.roles || !user.roles.includes('ROLE_CUSTOMER'))
+                .map(user => {
+                    let roleName = 'Owner';
+                    if (user.roles && user.roles.length > 0) {
+                        const roleCode = user.roles[0];
+                        if (roleCode === 'ROLE_WAITER') roleName = 'Waiter';
+                        else if (roleCode === 'ROLE_KITCHEN') roleName = 'Kitchen';
+                        else if (roleCode === 'ROLE_CASHIER') roleName = 'Cashier';
+                        else if (roleCode === 'ROLE_ADMIN') roleName = 'Owner';
+                    }
+                    
+                    return {
+                        id: user.id,
+                        employeeId: user.username,
+                        username: user.username,
+                        name: user.fullName || user.username,
+                        role: roleName,
+                        salary: user.baseSalary != null ? user.baseSalary : 0,
+                        status: user.enabled ? 'Active' : 'Inactive'
+                    };
+                });
+            
+            setStaff(mappedStaff);
 
-        const storedPayroll = localStorage.getItem('mockPayroll');
-        if (storedPayroll) {
-            const allPayrolls = JSON.parse(storedPayroll);
-            // Auto-clean: remove payroll records where the employee no longer exists
-            const validPayrolls = allPayrolls.filter(p => {
-                const empExists = storedStaff.some(
-                    s => String(s.id) === String(p.employeeId) || String(s.employeeId) === String(p.employeeId)
-                );
-                return empExists;
-            });
-            // If we cleaned some out, persist the cleaned list
-            if (validPayrolls.length !== allPayrolls.length) {
-                localStorage.setItem('mockPayroll', JSON.stringify(validPayrolls));
+            const storedPayroll = localStorage.getItem('mockPayroll');
+            if (storedPayroll) {
+                const allPayrolls = JSON.parse(storedPayroll);
+                // Auto-clean: remove payroll records where the employee no longer exists
+                const validPayrolls = allPayrolls.filter(p => {
+                    const empExists = mappedStaff.some(
+                        s => String(s.id) === String(p.employeeId) || String(s.employeeId) === String(p.employeeId)
+                    );
+                    return empExists;
+                });
+                // If we cleaned some out, persist the cleaned list
+                if (validPayrolls.length !== allPayrolls.length) {
+                    localStorage.setItem('mockPayroll', JSON.stringify(validPayrolls));
+                }
+                setPayrolls(validPayrolls);
+            } else {
+                setPayrolls([]);
             }
-            setPayrolls(validPayrolls);
-        } else {
-            setPayrolls([]);
+        } catch (error) {
+            console.error("Failed to load staff for payroll:", error);
+            alert("Failed to load staff members. Please ensure the backend is running.");
+        } finally {
+            setLoading(false);
         }
     };
 
