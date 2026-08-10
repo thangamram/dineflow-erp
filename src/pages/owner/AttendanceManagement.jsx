@@ -16,7 +16,8 @@ const AttendanceManagement = () => {
   const loadData = async () => {
     try {
         const usersRes = await api.get('/api/users/all');
-        const staffList = usersRes.data
+        const usersData = usersRes.data || usersRes;
+        const staffList = usersData
             .filter(u => u.roles && !u.roles.includes('ROLE_ADMIN') && u.enabled)
             .map(u => ({
                 employeeId: u.username,

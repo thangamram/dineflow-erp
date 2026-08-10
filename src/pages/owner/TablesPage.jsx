@@ -32,7 +32,8 @@ export default function TablesPage() {
 
         try {
             const usersRes = await api.get('/api/users/all');
-            const waitersList = usersRes.data
+            const usersData = usersRes.data || usersRes;
+            const waitersList = usersData
                 .filter(u => u.roles && u.roles.includes('ROLE_WAITER') && u.enabled)
                 .map(u => ({
                     username: u.username,
