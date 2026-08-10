@@ -16,28 +16,18 @@ export default function TablesPage() {
     const loadData = async () => {
         try {
             const backendTables = await api.get('/tables');
-            const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
-            const deletedIds = (JSON.parse(localStorage.getItem('deletedTableIds') || '[]')).map(String);
-
             const mapped = (backendTables || [])
-                .filter(t => !deletedIds.includes(String(t.id)))
                 .map(t => ({
                     id: t.id,
                     number: t.tableNumber || String(t.id),
                     capacity: t.capacity || t.seats || 4,
                     status: t.status === 'AVAILABLE' ? 'Available' : t.status === 'OCCUPIED' ? 'Customer Dining' : t.status === 'CLEANING' ? 'Needs Cleaning' : 'Available',
-                    assignedWaiter: t.assignedWaiter || assignments[t.id] || '',
-                    qrToken: t.qrToken || String(t.id)
+                    assignedWaiter: t.assignedWaiter || '',
+                    qrToken: String(t.id)
                 }));
             setTables(mapped);
         } catch (err) {
             console.error('Failed to load tables from API:', err);
-            const storedTables = localStorage.getItem('mockTables');
-            if (storedTables) {
-                const parsed = JSON.parse(storedTables);
-                const migrated = parsed.map(t => t.qrToken ? t : { ...t, qrToken: String(t.id || Date.now()) });
-                setTables(migrated);
-            }
         }
 
         const storedStaff = localStorage.getItem('mockStaff');
@@ -55,10 +45,7 @@ export default function TablesPage() {
         return () => clearInterval(interval);
     }, []);
 
-    const saveTables = (updatedTables) => {
-        setTables(updatedTables);
-        localStorage.setItem('mockTables', JSON.stringify(updatedTables));
-    };
+    // No mock save needed
 
     const handleAddTable = async (e) => {
         e.preventDefault();
@@ -77,37 +64,18 @@ export default function TablesPage() {
             loadData();
         } catch (err) {
             console.error('Failed to create table via API:', err);
-            const updated = [...tables, { 
-                id: Date.now(), 
-                number: newTable.number, 
-                capacity: newTable.capacity, 
-                status: 'Available',
-                assignedWaiter: newTable.assignedWaiter,
-                qrToken: String(Date.now())
-            }];
-            saveTables(updated);
-            setShowAddModal(false);
-            setNewTable({ number: '', capacity: 4, assignedWaiter: '' });
+            alert("Failed to create table in database.");
         }
     };
 
     const handleDelete = async (id) => {
         if (confirm('Are you sure you want to delete this table?')) {
-            // Immediately hide from UI
-            setTables(prev => prev.filter(t => String(t.id) !== String(id)));
-
-            // Persist hidden IDs to survive page refresh
-            const deletedIds = (JSON.parse(localStorage.getItem('deletedTableIds') || '[]')).map(String);
-            if (!deletedIds.includes(String(id))) {
-                deletedIds.push(String(id));
-                localStorage.setItem('deletedTableIds', JSON.stringify(deletedIds));
-            }
-
-            // Try real delete in background
             try {
                 await api.delete(`/tables/${id}`);
+                loadData();
             } catch (err) {
-                console.warn('Backend table delete skipped (FK constraint):', err?.message);
+                console.error('Failed to delete table from API:', err);
+                alert("Failed to delete table. Make sure it has no active orders.");
             }
         }
     };
@@ -117,19 +85,13 @@ export default function TablesPage() {
             await api.patch(`/tables/${id}/status?status=AVAILABLE`);
             loadData();
         } catch (err) {
-            console.error('Failed to update table status:', err);
-            saveTables(tables.map(t => t.id === id ? { ...t, status: 'Available' } : t));
+            console.error('Failed to update table via API:', err);
+            alert("Failed to update table in database.");
         }
     };
     
     const handleAssignWaiter = async (tableId, waiterUsername) => {
         try {
-            // Save to localStorage for immediate local display
-            const assignments = JSON.parse(localStorage.getItem('tableWaiterAssignments') || '{}');
-            assignments[tableId] = waiterUsername;
-            localStorage.setItem('tableWaiterAssignments', JSON.stringify(assignments));
-
-            // Also save to backend database so other devices/portals can read it
             const t = tables.find(tbl => tbl.id === tableId);
             await api.put(`/tables/${tableId}`, {
                 tableNumber: t.number,
@@ -162,9 +124,7 @@ export default function TablesPage() {
                 loadData();
             } catch (err) {
                 console.error('Failed to regenerate QR code:', err);
-                const updated = tables.map(t => t.id === tableId ? { ...t, qrToken: String(Date.now()) } : t);
-                saveTables(updated);
-                alert("QR Code regenerated successfully!");
+                alert("Failed to regenerate QR code.");
             }
         }
     };

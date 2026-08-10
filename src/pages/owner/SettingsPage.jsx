@@ -41,27 +41,19 @@ export default function SettingsPage() {
                 }
             } catch (e) { console.error('Failed to clear orders:', e); }
 
-            // 3. Delete all tables - track ones that still can't be deleted (FK) and hide them
-            const failedTableIds = [];
+            // 3. Delete all tables
             try {
                 const tables = await api.get('/tables').catch(() => []);
                 if (Array.isArray(tables)) {
                     for (const t of tables) {
                         try {
                             await api.delete(`/tables/${t.id}`);
-                        } catch {
-                            // Can't delete from DB - mark as AVAILABLE and hide in UI via deletedTableIds
-                            await api.patch(`/tables/${t.id}/status?status=AVAILABLE`).catch(() => {});
-                            failedTableIds.push(String(t.id));
+                        } catch (e) {
+                            console.error(`Failed to delete table ${t.id}:`, e);
                         }
                     }
                 }
             } catch (e) { console.error('Failed to clear tables:', e); }
-            // Persist IDs that couldn't be DB-deleted so they stay hidden from the UI
-            if (failedTableIds.length > 0) {
-                localStorage.setItem('deletedTableIds', JSON.stringify(failedTableIds));
-            }
-
             // 4. Delete all menu items
             try {
                 const menuRes = await api.get('/menu-items?size=200').catch(() => ({}));
@@ -96,9 +88,8 @@ export default function SettingsPage() {
                 'mockPayroll', 'mockPayrollLogs', 'mockAuditLogs', 'mockNotifications',
                 'cashierPaid', 'cashierPending', 'kdsSessions', 'tableWaiterAssignments',
                 'lastPlacedOrderId', 'customerSessionId', 'tableNumber',
-                'onboardingCompleted', 'onboardingStep', 'onboardingData'
+                'onboardingCompleted', 'onboardingStep', 'onboardingData', 'deletedTableIds'
             ];
-            // Note: 'deletedTableIds' is intentionally kept to hide un-deletable tables
             mockKeys.forEach(key => localStorage.removeItem(key));
 
             alert("✅ All data wiped! The ERP is now clean and ready for fresh real data.");
