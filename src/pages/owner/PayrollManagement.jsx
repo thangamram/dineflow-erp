@@ -37,36 +37,18 @@ export default function PayrollManagement() {
 
     const loadData = async () => {
         try {
-            const res = await api.get('/users');
-            const users = res.content || res.data?.content || res;
+            const activeRes = await api.get('/employees/active');
+            const staffList = (activeRes || []).map(u => ({
+                id: u.id,
+                employeeId: u.username,
+                name: u.fullName || u.username,
+                role: u.designation === 'ROLE_WAITER' ? 'Waiter' : 
+                      u.designation === 'ROLE_KITCHEN' ? 'Kitchen' : 
+                      u.designation === 'ROLE_CASHIER' ? 'Cashier' : 'Staff',
+                salary: u.baseSalary || 2000
+            }));
             
-            // Ensure users is an array
-            const usersArray = Array.isArray(users) ? users : [];
-            
-            const mappedStaff = usersArray
-                .filter(user => !user.roles || (!user.roles.includes('ROLE_CUSTOMER') && !user.roles.includes('ROLE_ADMIN')))
-                .map(user => {
-                    let roleName = 'Owner';
-                    if (user.roles && user.roles.length > 0) {
-                        const roleCode = user.roles[0];
-                        if (roleCode === 'ROLE_WAITER') roleName = 'Waiter';
-                        else if (roleCode === 'ROLE_KITCHEN') roleName = 'Kitchen';
-                        else if (roleCode === 'ROLE_CASHIER') roleName = 'Cashier';
-                        else if (roleCode === 'ROLE_ADMIN') roleName = 'Owner';
-                    }
-                    
-                    return {
-                        id: user.id,
-                        employeeId: user.username,
-                        username: user.username,
-                        name: user.fullName || user.username,
-                        role: roleName,
-                        salary: user.baseSalary != null ? user.baseSalary : 0,
-                        status: user.enabled ? 'Active' : 'Inactive'
-                    };
-                });
-            
-            setStaff(mappedStaff);
+            setStaff(staffList);
 
             const payrollRes = await api.get('/payrolls');
             const allPayrolls = payrollRes || [];
