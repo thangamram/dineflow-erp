@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { UtensilsCrossed, Mail, Lock, ArrowRight } from 'lucide-react';
+import { UtensilsCrossed, Mail, Lock, ArrowRight, UserCheck } from 'lucide-react';
 import api from '../api';
 
 const LoginPage = () => {
