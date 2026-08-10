@@ -105,7 +105,7 @@ export default function PayrollManagement() {
                       (parseFloat(formData.bonus) || 0) - 
                       (parseFloat(formData.deductions) || 0);
 
-    const handleEmployeeSelect = (id) => {
+    const handleEmployeeSelect = async (id) => {
         const employee = staff.find(s => String(s.id) === String(id) || String(s.employeeId) === String(id));
         const baseSalary = employee ? parseFloat(employee.salary) || 0 : 0;
         
@@ -113,33 +113,44 @@ export default function PayrollManagement() {
         let stats = null;
 
         if (employee) {
-            const allAttendance = JSON.parse(localStorage.getItem('mockAttendance') || '[]');
-            const empAttendance = allAttendance.filter(a => a.employeeId === employee.employeeId);
+            try {
+                const attRes = await api.get(`/employees/${employee.id}/attendance`);
+                const empAttendance = attRes || [];
             
-            const absentCount = empAttendance.filter(a => a.status === 'Absent').length;
-            const halfDayCount = empAttendance.filter(a => a.status === 'Half Day').length;
-            const presentCount = empAttendance.filter(a => a.status === 'Present').length;
-            const leaveCount = empAttendance.filter(a => a.status === 'On Leave').length;
+                const absentCount = empAttendance.filter(a => a.status === 'Absent').length;
+                const halfDayCount = empAttendance.filter(a => a.status === 'Half Day').length;
+                const presentCount = empAttendance.filter(a => a.status === 'Present').length;
+                const leaveCount = empAttendance.filter(a => a.status === 'On Leave').length;
             
-            const dailyRate = baseSalary / 30;
-            autoDeduction = (absentCount * dailyRate) + (halfDayCount * 0.5 * dailyRate);
+                const dailyRate = baseSalary / 30;
+                autoDeduction = (absentCount * dailyRate) + (halfDayCount * 0.5 * dailyRate);
             
-            stats = {
-                present: presentCount,
-                absent: absentCount,
-                halfDay: halfDayCount,
-                leave: leaveCount
-            };
+                setAttendanceStats({
+                    present: presentCount,
+                    absent: absentCount,
+                    halfDay: halfDayCount,
+                    leave: leaveCount
+                });
+            
+                setFormData({
+                    ...formData,
+                    employeeId: employeeId,
+                    basicSalary: baseSalary,
+                    deductions: Math.round(autoDeduction)
+                });
+            } catch (err) {
+                console.error('Failed to load attendance for payroll stats:', err);
+                setAttendanceStats(null);
+            }
+        } else {
+            setAttendanceStats(null);
+            setFormData({
+                ...formData,
+                employeeId: '',
+                basicSalary: 0,
+                deductions: 0
+            });
         }
-        
-        setAttendanceStats(stats);
-        
-        setFormData({
-            ...formData,
-            employeeId: id,
-            basicSalary: baseSalary,
-            deductions: Math.round(autoDeduction)
-        });
     };
 
     const openCreateModal = () => {
