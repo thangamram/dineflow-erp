@@ -37,9 +37,13 @@ export default function PayrollManagement() {
 
     const loadData = async () => {
         try {
-            const response = await api.get('/api/users/all');
-            const users = response.data || response;
-            const mappedStaff = users
+            const res = await api.get('/users');
+            const users = res.content || res.data?.content || res;
+            
+            // Ensure users is an array
+            const usersArray = Array.isArray(users) ? users : [];
+            
+            const mappedStaff = usersArray
                 .filter(user => !user.roles || !user.roles.includes('ROLE_CUSTOMER'))
                 .map(user => {
                     let roleName = 'Owner';

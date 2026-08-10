@@ -31,9 +31,11 @@ export default function TablesPage() {
         }
 
         try {
-            const usersRes = await api.get('/api/users/all');
-            const usersData = usersRes.data || usersRes;
-            const waitersList = usersData
+            const usersRes = await api.get('/users');
+            const usersData = usersRes.content || usersRes.data?.content || usersRes;
+            
+            const usersArray = Array.isArray(usersData) ? usersData : [];
+            const waitersList = usersArray
                 .filter(u => u.roles && u.roles.includes('ROLE_WAITER') && u.enabled)
                 .map(u => ({
                     username: u.username,

@@ -14,11 +14,13 @@ const AttendanceManagement = () => {
   }, [selectedDate]);
 
   const loadData = async () => {
-    try {
-        const usersRes = await api.get('/api/users/all');
-        const usersData = usersRes.data || usersRes;
-        const staffList = usersData
-            .filter(u => u.roles && !u.roles.includes('ROLE_ADMIN') && u.enabled)
+        try {
+            const usersRes = await api.get('/users');
+            const usersData = usersRes.content || usersRes.data?.content || usersRes;
+            
+            const usersArray = Array.isArray(usersData) ? usersData : [];
+            const staffList = usersArray
+                .filter(u => u.roles && !u.roles.includes('ROLE_ADMIN') && u.enabled)
             .map(u => ({
                 employeeId: u.username,
                 name: u.fullName || u.username,
