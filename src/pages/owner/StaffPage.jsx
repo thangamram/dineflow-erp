@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, UserCheck, Shield, X, Save, Trash2, Edit2 } from 'lucide-react';
+import { Search, Plus, Shield, X, Save, Trash2, Edit2, Loader } from 'lucide-react';
+import api from '../../api';
 
 export default function StaffPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [staffMembers, setStaffMembers] = useState([]);
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingStaff, setEditingStaff] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
         employeeId: '',
@@ -17,12 +20,44 @@ export default function StaffPage() {
         status: 'Active'
     });
 
-    const loadStaff = () => {
-        const stored = localStorage.getItem('mockStaff');
-        if (stored) {
-            setStaffMembers(JSON.parse(stored));
-        } else {
-            setStaffMembers([]);
+    const loadStaff = async () => {
+        setLoading(true);
+        try {
+            // Fetch users from backend
+            const res = await api.get('/users');
+            const users = res.content || res;
+            
+            // Map users to frontend format and filter out customers and owners
+            const mappedStaff = users
+                .filter(user => !user.roles || !user.roles.includes('ROLE_CUSTOMER'))
+                .map(user => {
+                    let roleName = 'Owner';
+                    if (user.roles && user.roles.length > 0) {
+                        const roleCode = user.roles[0];
+                        if (roleCode === 'ROLE_WAITER') roleName = 'Waiter';
+                        else if (roleCode === 'ROLE_KITCHEN') roleName = 'Kitchen';
+                        else if (roleCode === 'ROLE_CASHIER') roleName = 'Cashier';
+                        else if (roleCode === 'ROLE_ADMIN') roleName = 'Owner';
+                    }
+                    
+                    return {
+                        id: user.id,
+                        employeeId: user.username,
+                        username: user.username,
+                        name: user.fullName || user.username,
+                        role: roleName,
+                        salary: user.baseSalary != null ? user.baseSalary : 'N/A',
+                        status: user.enabled ? 'Active' : 'Inactive'
+                    };
+                })
+                .filter(staff => staff.role !== 'Owner');
+                
+            setStaffMembers(mappedStaff);
+        } catch (error) {
+            console.error("Failed to load staff:", error);
+            alert("Failed to load staff members. Please ensure the backend is running.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -30,15 +65,20 @@ export default function StaffPage() {
         loadStaff();
     }, []);
 
-    const saveStaff = (updatedStaff) => {
-        setStaffMembers(updatedStaff);
-        localStorage.setItem('mockStaff', JSON.stringify(updatedStaff));
-    };
-
     const handleOpenAdd = () => {
-        const nextId = `EMP-${(staffMembers.length + 1).toString().padStart(4, '0')}`;
+        // Auto generate next EMP- ID
+        let nextNum = 1;
+        staffMembers.forEach(s => {
+            const match = s.username.match(/^EMP-0*(\d+)$/);
+            if (match) {
+                const num = parseInt(match[1]);
+                if (num >= nextNum) nextNum = num + 1;
+            }
+        });
+        
+        const nextId = 'EMP-' + nextNum.toString().padStart(4, '0');
         setFormData({ 
-            name: '', employeeId: nextId, username: nextId, password: 'Temp@123', role: 'Waiter', salary: '', 
+            name: '', employeeId: nextId, username: nextId, password: 'password123', role: 'Waiter', salary: '', 
             employmentType: 'Full-time', status: 'Active' 
         });
         setEditingStaff(null);
@@ -46,59 +86,88 @@ export default function StaffPage() {
     };
 
     const handleOpenEdit = (staff) => {
-        setFormData(staff);
-        setEditingStaff(staff.id);
+        setFormData({
+            name: staff.name,
+            employeeId: staff.employeeId,
+            username: staff.username,
+            password: '',
+            role: staff.role,
+            salary: staff.salary !== 'N/A' ? staff.salary : '',
+            employmentType: 'Full-time', // Defaulting as we aren't fetching this fully
+            status: staff.status
+        });
+        setEditingStaff(staff);
         setShowAddModal(true);
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.name || !formData.role || !formData.username) return;
         
-        if (editingStaff) {
-            const updated = staffMembers.map(s => s.id === editingStaff ? { ...s, ...formData } : s);
-            saveStaff(updated);
-        } else {
-            const newStaff = { ...formData, id: Date.now(), forcePasswordChange: true };
-            const updated = [...staffMembers, newStaff];
-            saveStaff(updated);
-            
-            const auditLogs = JSON.parse(localStorage.getItem('mockAuditLogs') || '[]');
-            auditLogs.unshift({
-                id: Date.now(), timestamp: new Date().toISOString(), action: 'Account Created',
-                user: formData.username, role: formData.role, details: `Created by Owner`
-            });
-            localStorage.setItem('mockAuditLogs', JSON.stringify(auditLogs));
-        }
-        setShowAddModal(false);
-    };
+        setSubmitting(true);
+        try {
+            if (editingStaff) {
+                let backendRole = 'ROLE_OWNER';
+                if (formData.role === 'Waiter') backendRole = 'ROLE_WAITER';
+                if (formData.role === 'Kitchen') backendRole = 'ROLE_KITCHEN';
+                if (formData.role === 'Cashier') backendRole = 'ROLE_CASHIER';
 
-    const handleResetPassword = () => {
-        if (confirm("Are you sure you want to reset this employee's password to Temp@123?")) {
-            const updated = staffMembers.map(s => s.id === editingStaff ? { ...s, password: 'Temp@123', forcePasswordChange: true } : s);
-            saveStaff(updated);
-            
-            const auditLogs = JSON.parse(localStorage.getItem('mockAuditLogs') || '[]');
-            auditLogs.unshift({
-                id: Date.now(), timestamp: new Date().toISOString(), action: 'Password Reset',
-                user: formData.username, role: formData.role, details: `Password reset to Temp@123 by Owner`
-            });
-            localStorage.setItem('mockAuditLogs', JSON.stringify(auditLogs));
-            
-            alert('Password reset successfully to Temp@123');
+                await api.put(`/users/${editingStaff.id}`, {
+                    username: formData.username,
+                    fullName: formData.name,
+                    role: backendRole,
+                    enabled: formData.status === 'Active',
+                    baseSalary: formData.salary || 0
+                });
+                alert('Employee updated successfully!');
+                await loadStaff();
+            } else {
+                // Determine backend role
+                let backendRole = 'ROLE_OWNER';
+                if (formData.role === 'Waiter') backendRole = 'ROLE_WAITER';
+                if (formData.role === 'Kitchen') backendRole = 'ROLE_KITCHEN';
+                if (formData.role === 'Cashier') backendRole = 'ROLE_CASHIER';
+
+                // Call /auth/register
+                await api.post('/auth/register', {
+                    username: formData.username,
+                    fullName: formData.name,
+                    email: formData.username.toLowerCase() + '@dineflow.local',
+                    mobileNumber: '0000000000',
+                    password: formData.password || 'password123',
+                    role: backendRole,
+                    baseSalary: formData.salary || 0
+                });
+
+                alert('Employee created successfully!');
+                await loadStaff();
+            }
             setShowAddModal(false);
+        } catch (error) {
+            console.error("Failed to save employee:", error);
+            alert("Failed to save employee: " + (error.response?.data?.message || error.message));
+        } finally {
+            setSubmitting(false);
         }
     };
 
-    const handleDelete = (id) => {
-        if (confirm('Are you sure you want to remove this employee?')) {
-            saveStaff(staffMembers.filter(s => s.id !== id));
+    const handleDelete = async (id) => {
+        if (window.confirm("Are you sure you want to permanently delete this employee?")) {
+            try {
+                await api.delete(`/users/${id}`);
+                alert("Employee deleted successfully!");
+                await loadStaff();
+            } catch (error) {
+                console.error("Failed to delete employee:", error);
+                alert("Failed to delete employee: " + (error.response?.data?.message || error.message));
+            }
         }
     };
 
     const filteredStaff = staffMembers.filter(staff => 
         staff.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        staff.role.toLowerCase().includes(searchTerm.toLowerCase())
+        staff.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        staff.username.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
@@ -106,7 +175,7 @@ export default function StaffPage() {
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Staff Management</h1>
-                    <p className="text-gray-500">Manage employee accounts, roles, and payroll settings</p>
+                    <p className="text-gray-500">Manage employee accounts and roles directly from the live database.</p>
                 </div>
                 <button onClick={handleOpenAdd} className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition-colors font-bold shadow-sm">
                     <Plus size={20} />
@@ -140,48 +209,55 @@ export default function StaffPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filteredStaff.map(staff => (
-                                <tr key={staff.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="p-4">
-                                        <div className="flex items-center space-x-3">
-                                            <div className="h-10 w-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-lg border border-blue-200">
-                                                {staff.name.charAt(0)}
+                            {loading ? (
+                                <tr><td colSpan="5" className="p-8 text-center text-gray-500"><Loader className="animate-spin inline mr-2" /> Loading staff from backend...</td></tr>
+                            ) : filteredStaff.length === 0 ? (
+                                <tr><td colSpan="5" className="p-8 text-center text-gray-500">No staff found.</td></tr>
+                            ) : (
+                                filteredStaff.map(staff => (
+                                    <tr key={staff.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="p-4">
+                                            <div className="flex items-center space-x-3">
+                                                <div className="h-10 w-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-lg border border-blue-200">
+                                                    {staff.name.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-gray-900">{staff.name}</p>
+                                                    <p className="text-xs text-gray-500">{staff.username}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <div className="font-bold text-gray-900">{staff.name}</div>
-                                                <div className="text-xs text-gray-500 font-medium">@{staff.username}</div>
+                                        </td>
+                                        <td className="p-4">
+                                            <span className={"inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border " + (
+                                                staff.role === 'Owner' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                                                staff.role === 'Manager' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                staff.role === 'Cashier' ? 'bg-green-100 text-green-700 border-green-200' :
+                                                'bg-gray-100 text-gray-700 border-gray-200'
+                                            )}>
+                                                {staff.role}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 font-medium text-gray-900">
+                                            {staff.salary}
+                                        </td>
+                                        <td className="p-4">
+                                            <span className={"inline-flex items-center space-x-1 " + (staff.status === 'Active' ? 'text-green-600' : 'text-gray-400')}>
+                                                <span className={"w-2 h-2 rounded-full " + (staff.status === 'Active' ? 'bg-green-500' : 'bg-gray-300')}></span>
+                                                <span className="text-sm font-bold">{staff.status}</span>
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <div className="flex items-center justify-end space-x-2">
+                                                <button onClick={() => handleOpenEdit(staff)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                                    <Edit2 size={18} />
+                                                </button>
+                                                <button onClick={() => handleDelete(staff.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                                    <Trash2 size={18} />
+                                                </button>
                                             </div>
-                                        </div>
-                                    </td>
-                                    <td className="p-4">
-                                        <span className="flex items-center space-x-1.5 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg w-max border border-gray-200 text-sm font-semibold">
-                                            <Shield size={14} className="text-blue-500" />
-                                            <span>{staff.role}</span>
-                                        </span>
-                                    </td>
-                                    <td className="p-4 text-gray-900 font-bold">
-                                        ₹{parseFloat(staff.salary || 0).toLocaleString()} / mo
-                                    </td>
-                                    <td className="p-4">
-                                        <span className={`flex items-center space-x-1.5 text-sm font-bold ${staff.status === 'Active' ? 'text-emerald-600' : 'text-gray-500'}`}>
-                                            <span className={`h-2 w-2 rounded-full ${staff.status === 'Active' ? 'bg-emerald-500' : 'bg-gray-400'}`}></span>
-                                            <span>{staff.status}</span>
-                                        </span>
-                                    </td>
-                                    <td className="p-4 text-right space-x-2">
-                                        <button onClick={() => handleOpenEdit(staff)} className="p-2 text-gray-400 hover:text-blue-600 transition-colors" title="Edit">
-                                            <Edit2 size={18} />
-                                        </button>
-                                        <button onClick={() => handleDelete(staff.id)} className="p-2 text-gray-400 hover:text-red-600 transition-colors" title="Delete">
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {filteredStaff.length === 0 && (
-                                <tr>
-                                    <td colSpan="5" className="p-8 text-center text-gray-500 font-medium">No employees found.</td>
-                                </tr>
+                                        </td>
+                                    </tr>
+                                ))
                             )}
                         </tbody>
                     </table>
@@ -190,15 +266,21 @@ export default function StaffPage() {
 
             {/* Add/Edit Modal */}
             {showAddModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                            <h2 className="text-xl font-bold text-gray-900">{editingStaff ? 'Edit Employee' : 'Add New Employee'}</h2>
-                            <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-6 border-b border-gray-100">
+                            <div>
+                                <h3 className="text-2xl font-black text-gray-900">
+                                    {editingStaff ? 'Edit Employee' : 'Add New Employee'}
+                                </h3>
+                                <p className="text-sm text-gray-500 mt-1">This will create a live backend user.</p>
+                            </div>
+                            <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-full transition-colors">
                                 <X size={24} />
                             </button>
                         </div>
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                        
+                        <form onSubmit={handleSubmit} className="p-6 space-y-5">
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
                                 <input 
@@ -223,7 +305,7 @@ export default function StaffPage() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Username</label>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Username (EmpID)</label>
                                     <input 
                                         type="text" 
                                         required
@@ -239,8 +321,8 @@ export default function StaffPage() {
                                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 flex items-start gap-3">
                                     <Shield size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
                                     <div>
-                                        <p className="text-sm font-bold text-blue-900">Temporary Password: Temp@123</p>
-                                        <p className="text-xs text-blue-700">The employee will be forced to change this upon first login.</p>
+                                        <p className="text-sm font-bold text-blue-900">Default Password: password123</p>
+                                        <p className="text-xs text-blue-700">The employee will use this password to log in.</p>
                                     </div>
                                 </div>
                             )}
@@ -256,7 +338,6 @@ export default function StaffPage() {
                                         <option value="Waiter">Waiter</option>
                                         <option value="Kitchen">Kitchen Staff</option>
                                         <option value="Cashier">Cashier</option>
-                                        <option value="Manager">Manager</option>
                                     </select>
                                 </div>
                                 <div>
@@ -275,10 +356,9 @@ export default function StaffPage() {
                             
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Base Salary (₹)</label>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Base Salary (Rs)</label>
                                     <input 
                                         type="number" 
-                                        required
                                         min="0"
                                         value={formData.salary}
                                         onChange={e => setFormData({...formData, salary: e.target.value})}
@@ -298,21 +378,14 @@ export default function StaffPage() {
                                 </div>
                             </div>
 
-                            <div className="pt-4 flex justify-between items-center border-t border-gray-100">
-                                <div>
-                                    {editingStaff && (
-                                        <button type="button" onClick={handleResetPassword} className="px-4 py-2 text-orange-600 font-bold hover:bg-orange-50 rounded-lg transition-colors border border-orange-200">
-                                            Reset Password
-                                        </button>
-                                    )}
-                                </div>
+                            <div className="pt-4 flex justify-end items-center border-t border-gray-100">
                                 <div className="flex space-x-3">
-                                    <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-lg transition-colors">
+                                    <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded-lg transition-colors" disabled={submitting}>
                                         Cancel
                                     </button>
-                                    <button type="submit" className="px-4 py-2 flex items-center gap-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition-colors">
+                                    <button type="submit" disabled={submitting} className="px-4 py-2 flex items-center gap-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-200 transition-colors disabled:opacity-50">
                                         <Save size={18} />
-                                        {editingStaff ? 'Save Changes' : 'Create Employee'}
+                                        {submitting ? 'Saving...' : (editingStaff ? 'Save Changes' : 'Create Employee')}
                                     </button>
                                 </div>
                             </div>
