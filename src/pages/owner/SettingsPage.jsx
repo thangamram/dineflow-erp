@@ -84,7 +84,7 @@ export default function SettingsPage() {
             // 7. Clear ALL localStorage mock keys
             const mockKeys = [
                 'mockTables', 'mockMenu', 'mockInventory', 'mockVendors', 'mockInventoryLogs',
-                'mockOrders', 'mockBills', 'mockStaff', 'mockAttendance', 'mockLeaves',
+                'mockBills', 'mockStaff', 'mockAttendance', 'mockLeaves',
                 'mockPayroll', 'mockPayrollLogs', 'mockAuditLogs', 'mockNotifications',
                 'cashierPaid', 'cashierPending', 'kdsSessions', 'tableWaiterAssignments',
                 'lastPlacedOrderId', 'customerSessionId', 'tableNumber',

@@ -76,21 +76,6 @@ export default function OrderTracking() {
           console.error("Failed to fetch order status from API:", e);
         }
       }
-
-      const storedOrders = localStorage.getItem('mockOrders');
-      if (storedOrders) {
-        const allOrders = JSON.parse(storedOrders);
-        const myOrders = allOrders.filter(o => o.tableNumber === String(tableNumber) && o.sessionId === sessionId);
-        if (myOrders.length > 0) {
-          const statuses = myOrders.map(o => o.status);
-          let overallStatus = 'PLACED';
-          if (statuses.includes('PENDING') || statuses.includes('NEW') || statuses.includes('RECEIVED') || statuses.includes('WAITING')) overallStatus = 'PLACED';
-          else if (statuses.includes('PREPARING') || statuses.includes('ACCEPTED')) overallStatus = 'PREPARING';
-          else if (statuses.includes('READY')) overallStatus = 'READY';
-          else if (statuses.includes('DELIVERED') || statuses.includes('COMPLETED')) overallStatus = 'DELIVERED';
-          setStatus(overallStatus);
-        }
-      }
     };
 
     const interval = setInterval(checkOrderStatus, 2000);

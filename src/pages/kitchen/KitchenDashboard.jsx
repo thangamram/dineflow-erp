@@ -25,11 +25,6 @@ export default function KitchenDashboard() {
       setOrders(mapped);
     } catch (error) {
       console.error('Failed to parse orders:', error);
-      // Fallback
-      const storedOrders = localStorage.getItem('mockOrders');
-      if (storedOrders) {
-        setOrders(JSON.parse(storedOrders));
-      }
     } finally {
       setLoading(false);
     }
@@ -107,18 +102,6 @@ export default function KitchenDashboard() {
       fetchOrders();
     } catch (err) {
       console.error('Failed to update status', err);
-      // Fallback
-      const storedOrders = localStorage.getItem('mockOrders');
-      if (storedOrders) {
-        const allOrders = JSON.parse(storedOrders);
-        const orderToUpdate = allOrders.find(o => o.id === id);
-        if (newStatus === 'PREPARING' && orderToUpdate && orderToUpdate.status !== 'PREPARING') {
-            deductInventoryForOrder(orderToUpdate);
-        }
-        const updatedOrders = allOrders.map(o => o.id === id ? { ...o, status: newStatus } : o);
-        localStorage.setItem('mockOrders', JSON.stringify(updatedOrders));
-        setOrders(updatedOrders);
-      }
     }
   };
 
